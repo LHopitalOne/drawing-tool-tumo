@@ -1,0 +1,120 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.container {
+    /* Remove background and shadow from container */
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    text-align: center;
+    max-width: 900px;
+    width: 100%;
+}
+
+h1 {
+    color: #333;
+    margin-bottom: 30px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.drawing-area {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+}
+
+#drawingCanvas {
+    border: 3px solid #333;
+    border-radius: 10px;
+    cursor: crosshair;
+    background: black;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 120px;
+}
+
+#clearBtn {
+    background: #ff6b6b;
+    color: white;
+}
+
+#clearBtn:hover {
+    background: #ff5252;
+    transform: translateY(-2px);
+}
+
+#saveBtn {
+    background: #4ecdc4;
+    color: white;
+}
+
+#saveBtn:hover {
+    background: #26d0ce;
+    transform: translateY(-2px);
+}
+
+.info {
+    color: #666;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.info p {
+    margin: 0;
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 20px;
+    }
+    
+    h1 {
+        font-size: 20px;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    button {
+        width: 100%;
+        max-width: 200px;
+    }
+} 

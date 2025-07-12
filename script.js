@@ -142,7 +142,7 @@ class DrawingTool {
     
     generatePublicLink(filename) {
         const repoName = 'QuickImgToLink28x28';
-        const username = 'yourusername'; // You'll need to update this
+        const username = 'lhopitalone'; // You'll need to update this
         return `https://${username}.github.io/${repoName}/images/${filename}`;
     }
 }

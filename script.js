@@ -124,26 +124,65 @@ class DrawingTool {
     }
     
     saveImage() {
-        this.canvas.toBlob((blob) => {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `drawing-${timestamp}.png`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            const publicLink = this.generatePublicLink(filename);
-            window.alert(`Image saved as: ${filename}\n\nPublic link (after GitHub Pages deployment):\n${publicLink}\n\nYou can use this link in your Python program to view the image.`);
+        this.canvas.toBlob(async (blob) => {
+            try {
+                // Generate UUID for filename
+                const uuid = this.generateUUID();
+                const filename = `${uuid}.png`;
+                
+                // Upload to Supabase storage
+                const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
+                const uploadUrl = supabaseUrl + filename;
+                
+                // Create FormData for upload
+                const formData = new FormData();
+                formData.append('file', blob, filename);
+                
+                // Upload to Supabase (you'll need to add your bearer token)
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ' // Replace with your actual key
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const publicUrl = `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
+                    window.alert(`Image uploaded successfully!\n\nFilename: ${filename}\nPublic URL: ${publicUrl}\n\nYou can use this URL in your Python program to view the image.`);
+                } else {
+                    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                window.alert(`Upload failed: ${error.message}\n\nImage has been downloaded locally as backup.`);
+                
+                // Fallback to local download only
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const fallbackFilename = `drawing-${timestamp}.png`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fallbackFilename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
         }, 'image/png');
     }
     
+    generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+    
     generatePublicLink(filename) {
-        const repoName = 'QuickImgToLink28x28';
-        const username = 'lhopitalone'; // You'll need to update this
-        return `https://${username}.github.io/${repoName}/images/${filename}`;
+        return `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
     }
 }
 

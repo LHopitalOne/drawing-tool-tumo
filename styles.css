@@ -39,14 +39,22 @@ h1 {
 }
 
 .drawing-area {
-    margin-bottom: 20px;
+    margin: 0 auto 20px auto;
     display: flex;
     justify-content: center;
+    align-items: center;
     background: white;
     border-radius: 15px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    padding: 30px;
+    padding: 25px;
+    box-sizing: content-box;
     overflow-x: auto;
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    max-width: 600px;
+    max-height: 600px;
+    min-width: 300px;
+    min-height: 300px;
 }
 
 #drawingCanvas {
@@ -56,11 +64,12 @@ h1 {
     background: black;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
     display: block;
-    max-width: 90vw;
-    max-height: 70vw;
+    max-width: 600px;
+    max-height: 600px;
     width: 100%;
     height: auto;
     aspect-ratio: 1 / 1;
+    margin: 0 auto;
 }
 
 .controls {

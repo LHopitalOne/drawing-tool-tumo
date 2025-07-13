@@ -155,14 +155,14 @@ class DrawingTool {
                 
                 if (response.ok) {
                     const publicUrl = `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-                    window.alert(`Image uploaded successfully!\n\nFilename: ${filename}\nPublic URL: ${publicUrl}\n\nYou can use this URL in your Python program to view the image.`);
+                    window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: ${publicUrl}\n\n`);
                 } else {
-                    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                    throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
                 }
                 
             } catch (error) {
-                console.error('Upload error:', error);
-                window.alert(`Upload failed: ${error.message}\n\nImage has been downloaded locally as backup.`);
+                console.error('Վայ չստացվեց...:', error);
+                window.alert(`Վայ չստացվեց...: ${error.message}\n\n Փոխարենը՝ նկարդ քո համակարգչին ներբեռնեցի`);
                 
                 // Fallback to local download only
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -209,13 +209,13 @@ class DrawingTool {
             });
             if (response.ok) {
                 const publicUrl = this.generatePublicLink(filename);
-                window.alert(`Image uploaded successfully!\n\nFilename: ${filename}\nPublic URL: ${publicUrl}\n\nYou can use this URL in your Python program to view the image.`);
+                window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: ${publicUrl}\n\n`);
             } else {
-                throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
             }
         } catch (error) {
-            console.error('Upload error:', error);
-            window.alert(`Upload failed: ${error.message}`);
+            console.error('Վայ չստացվեց...:', error);
+            window.alert(`Վայ չստացվեց...: ${error.message}`);
         } finally {
             e.target.value = '';
         }

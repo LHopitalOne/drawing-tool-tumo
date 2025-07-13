@@ -30,16 +30,7 @@ To run the drawing tool locally:
    cd drawing-tool-tumo
    ```
 
-2. Open `index.html` in your web browser, or serve it using a local server:
-   ```bash
-   # Using Python 3
-   python -m http.server 8000
-   
-   # Using Node.js (if you have http-server installed)
-   npx http-server
-   ```
-
-3. Navigate to `http://localhost:8000` in your browser
+2. Open `index.html` in your web browser
 
 ## Deployment to GitHub Pages
 

@@ -36,7 +36,7 @@ To run the drawing tool locally:
 
 To deploy this tool to GitHub Pages for public access:
 
-1. **Create a GitHub repository** named `QuickImgToLink28x28`
+1. **Create a GitHub repository** named `drawing-tool-tumo`
 
 2. **Push your code** to the repository:
    ```bash

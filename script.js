@@ -47,6 +47,11 @@ class DrawingTool {
         this.canvas.addEventListener('touchend', this.stopDrawing.bind(this));
         document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
         document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
+        // Upload button logic
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
     }
     
     getMousePos(e) {
@@ -128,7 +133,7 @@ class DrawingTool {
             try {
                 // Generate UUID for filename
                 const uuid = this.generateUUID();
-                const filename = `${uuid}.png`;
+                const filename = `${uuid}.jpg`;
                 
                 // Upload to Supabase storage
                 const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
@@ -142,7 +147,8 @@ class DrawingTool {
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
                     headers: {
-                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ' // Replace with your actual key
+                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ', // Replace with your actual key
+                        'Content-Type': 'image/jpeg'
                     },
                     body: formData
                 });
@@ -160,7 +166,7 @@ class DrawingTool {
                 
                 // Fallback to local download only
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const fallbackFilename = `drawing-${timestamp}.png`;
+                const fallbackFilename = `drawing-${timestamp}.jpg`;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -170,7 +176,63 @@ class DrawingTool {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }
-        }, 'image/png');
+        }, 'image/jpg');
+    }
+
+    async handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const uuid = this.generateUUID();
+            const filename = `${uuid}.jpg`;
+            const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
+            const uploadUrl = supabaseUrl + filename;
+            // Convert to jpg if not already
+            let uploadBlob = file;
+            if (!file.type.includes('jpg')) {
+                const img = await this.fileToImage(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                uploadBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg'));
+            }
+            const formData = new FormData();
+            formData.append('file', uploadBlob, filename);
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
+                },
+                body: formData
+            });
+            if (response.ok) {
+                const publicUrl = this.generatePublicLink(filename);
+                window.alert(`Image uploaded successfully!\n\nFilename: ${filename}\nPublic URL: ${publicUrl}\n\nYou can use this URL in your Python program to view the image.`);
+            } else {
+                throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            window.alert(`Upload failed: ${error.message}`);
+        } finally {
+            e.target.value = '';
+        }
+    }
+
+    fileToImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = event.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
     }
     
     generateUUID() {

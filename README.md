@@ -86,7 +86,7 @@ from PIL import Image
 import io
 
 # Example: Load an image from the public link
-image_url = "https://yourusername.github.io/QuickImgToLink28x28/images/drawing-2024-01-15T10-30-45-123Z.png"
+image_url = "https://yourusername.github.io/QuickImgToLink28x28/images/drawing-2024-01-15T10-30-45-123Z.jpg"
 
 response = requests.get(image_url)
 image = Image.open(io.BytesIO(response.content))
@@ -119,8 +119,8 @@ QuickImgToLink28x28/
 - **Background**: Black (#000000)
 - **Brush Color**: White (#FFFFFF)
 - **Brush Style**: Soft-edged circular brush
-- **Output Format**: PNG
-- **File Naming**: `drawing-{timestamp}.png`
+- **Output Format**: jpg
+- **File Naming**: `drawing-{timestamp}.jpg`
 
 ## Contributing
 

@@ -8,16 +8,46 @@
 </head>
 <body>
     <div class="container">
-        <h1>Նկարիր քո թվանշանը</h1>
+        <h1>Արի ստանանք նկար</h1>
         <div class="drawing-area">
             <canvas id="drawingCanvas" width="600" height="600"></canvas>
         </div>
         <div class="controls">
-            <button id="clearBtn">Մաքրել</button>
-            <button id="saveBtn">Պահպանել</button>
+            <button id="clearBtn">
+                <span class="icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 6H15M8 9V13M12 9V13M7 6V4.5C7 3.67157 7.67157 3 8.5 3H11.5C12.3284 3 13 3.67157 13 4.5V6M4 6H16V16.5C16 17.3284 15.3284 18 14.5 18H5.5C4.67157 18 4 17.3284 4 16.5V6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                Մաքրել տարածքը
+            </button>
+            <button id="saveBtn">
+                <span class="icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10 3V13M10 13L6 9M10 13L14 9M4 17H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                Պահպանել
+            </button>
+            <button id="uploadBtn">
+                <span class="icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10 17V7M10 7L6 11M10 7L14 11M4 17H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                Ներմուծել նկար
+            </button>
+            <input type="file" id="fileInput" accept="image/*" style="display:none" />
         </div>
         <div class="info">
-            <p>Մկնիկով նկարիր թվանշանը և պահպանիր, որպեսզի ստանաս նկարի հասցե։</p>
+            <p>
+                <span class="icon" aria-hidden="true" style="vertical-align: middle; margin-right: 6px;">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline;">
+                        <path d="M10 2C6.686 2 4 4.686 4 8c0 2.21 1.343 4.09 3.25 4.75V15a.75.75 0 0 0 .75.75h4a.75.75 0 0 0 .75-.75v-2.25C14.657 12.09 16 10.21 16 8c0-3.314-2.686-6-6-6zm-1 15a1 1 0 1 0 2 0h-2z" fill="#FFD600"/>
+                    </svg>
+                </span>
+                Մկնիկով նկարիր թվանշանը և պահպանիր, որպեսզի ստանաս նկարի հասցե
+            </p>
         </div>
     </div>
     <script src="script.js"></script>

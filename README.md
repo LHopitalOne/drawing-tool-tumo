@@ -110,7 +110,7 @@ QuickImgToLink28x28/
 
 ## Technical Details
 
-- **Canvas Size**: 800x800 pixels (draws at 600x600 on desktop for better UX)
+- **Canvas Size**: 600x600 pixels (draws at 600x600 on desktop for better UX)
 - **Background**: Black (#000000)
 - **Brush Color**: White (#FFFFFF)
 - **Brush Style**: Soft-edged circular brush

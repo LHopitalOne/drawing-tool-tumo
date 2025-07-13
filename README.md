@@ -1,10 +1,10 @@
-# QuickImgToLink - Drawing Tool
+# Quick image drawing and uploading tool
 
 A simple web-based drawing tool that creates 800x800 pixel images with a white brush on a black canvas. Perfect for creating quick sketches that can be easily shared and used in Python programs. You can also upload your own images to the cloud.
 
 ## Features
 
-- **800x800 pixel canvas** with black background
+- **600x600 pixel canvas** with black background
 - **White brush with soft edges** for smooth drawing
 - **Touch support** for mobile devices
 - **One-click save** with automatic upload to cloud storage

@@ -1,21 +1,24 @@
 # QuickImgToLink - Drawing Tool
 
-A simple web-based drawing tool that creates 200x200 pixel images with a white brush on a black canvas. Perfect for creating quick sketches that can be easily shared and used in Python programs.
+A simple web-based drawing tool that creates 800x800 pixel images with a white brush on a black canvas. Perfect for creating quick sketches that can be easily shared and used in Python programs. You can also upload your own images to the cloud.
 
 ## Features
 
-- **200x200 pixel canvas** with black background
+- **800x800 pixel canvas** with black background
 - **White brush with soft edges** for smooth drawing
 - **Touch support** for mobile devices
-- **One-click save** with automatic download
+- **One-click save** with automatic upload to cloud storage
+- **Image upload functionality** for custom images
 - **Public link generation** for easy sharing
 - **Responsive design** that works on all devices
+- **Black and white drawing** (black canvas, white brush)
 
 ## Usage
 
 1. **Draw**: Click and drag (or touch and drag on mobile) to draw on the black canvas
 2. **Clear**: Click the "Clear Canvas" button to start over
-3. **Save**: Click "Save Image" to download the drawing and get a public link
+3. **Save**: Click "Save Image" to upload your drawing to cloud storage and get a public link
+4. **Upload**: Click "Upload Image" to upload your own images to the cloud
 
 ## Local Development
 
@@ -23,8 +26,8 @@ To run the drawing tool locally:
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/QuickImgToLink28x28.git
-   cd QuickImgToLink28x28
+   git clone https://github.com/LHopitalOne/drawing-tool-tumo.git
+   cd drawing-tool-tumo
    ```
 
 2. Open `index.html` in your web browser, or serve it using a local server:
@@ -50,7 +53,7 @@ To deploy this tool to GitHub Pages for public access:
    git add .
    git commit -m "Initial commit"
    git branch -M main
-   git remote add origin https://github.com/yourusername/QuickImgToLink28x28.git
+   git remote add origin https://github.com/LHopitalOne/drawing-tool-tumo.git
    git push -u origin main
    ```
 
@@ -62,19 +65,19 @@ To deploy this tool to GitHub Pages for public access:
    - Choose "main" branch and "/ (root)" folder
    - Click "Save"
 
-4. **Update the username** in `script.js`:
+4. **Update the Supabase key** in `script.js`:
    - Open `script.js`
-   - Find line with `const username = 'yourusername';`
-   - Replace `'yourusername'` with your actual GitHub username
+   - Find the Authorization header with `'Bearer YOUR_SUPABASE_KEY_HERE'`
+   - Replace with your actual Supabase API key
 
 5. **Commit and push the changes**:
    ```bash
    git add script.js
-   git commit -m "Update username for GitHub Pages"
+   git commit -m "Update Supabase key"
    git push
    ```
 
-Your drawing tool will be available at: `https://yourusername.github.io/QuickImgToLink28x28/`
+Your drawing tool will be available at: `https://yourusername.github.io/drawing-tool-tumo/`
 
 ## Using with Python
 
@@ -86,7 +89,7 @@ from PIL import Image
 import io
 
 # Example: Load an image from the public link
-image_url = "https://yourusername.github.io/QuickImgToLink28x28/images/drawing-2024-01-15T10-30-45-123Z.jpg"
+image_url = "https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/your-uuid-here.jpg"
 
 response = requests.get(image_url)
 image = Image.open(io.BytesIO(response.content))
@@ -102,6 +105,7 @@ QuickImgToLink28x28/
 ├── index.html          # Main HTML file
 ├── styles.css          # CSS styling
 ├── script.js           # JavaScript drawing functionality
+├── requirements.txt    # Python dependencies
 └── README.md           # This file
 ```
 
@@ -115,12 +119,14 @@ QuickImgToLink28x28/
 
 ## Technical Details
 
-- **Canvas Size**: 200x200 pixels
+- **Canvas Size**: 800x800 pixels (draws at 600x600 on desktop for better UX)
 - **Background**: Black (#000000)
 - **Brush Color**: White (#FFFFFF)
 - **Brush Style**: Soft-edged circular brush
-- **Output Format**: jpg
-- **File Naming**: `drawing-{timestamp}.jpg`
+- **Output Format**: JPEG
+- **File Naming**: UUID-based naming for cloud storage
+- **Cloud Storage**: Supabase storage bucket
+- **Drawing Style**: Black and white only (black canvas, white brush)
 
 ## Contributing
 

@@ -154,7 +154,7 @@ class DrawingTool {
                 
                 if (response.ok) {
                     const publicUrl = `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-                    window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: ${publicUrl}\n\n`);
+                    window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
                 } else {
                     throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
                 }
@@ -208,7 +208,7 @@ class DrawingTool {
             });
             if (response.ok) {
                 const publicUrl = this.generatePublicLink(filename);
-                window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: ${publicUrl}\n\n`);
+                window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
             } else {
                 throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
             }

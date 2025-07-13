@@ -5,7 +5,7 @@ class DrawingTool {
         this.isDrawing = false;
         this.lastX = 0;
         this.lastY = 0;
-        this.brushRadius = 14; // Increased brush size
+        this.brushRadius = 30; // Increased brush size
         this.init();
         this.setupEventListeners();
     }

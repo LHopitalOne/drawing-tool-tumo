@@ -10,25 +10,43 @@
     font-family: "Imagine Square ARM";
 }
 
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
+    min-width: 100vw;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    padding: 20px;
+    justify-content: center;
+    padding: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .container {
-    /* Remove background and shadow from container */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     box-shadow: none;
     border-radius: 0;
     padding: 0;
     text-align: center;
-    max-width: 900px;
+    max-width: 100vw;
     width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 h1 {
@@ -46,15 +64,14 @@ h1 {
     background: white;
     border-radius: 15px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    padding: 25px;
-    box-sizing: content-box;
+    padding: 2vw;
+    box-sizing: border-box;
     overflow-x: auto;
     aspect-ratio: 1 / 1;
-    width: 100%;
+    width: min(98vw, 80vh);
+    height: min(98vw, 80vh);
     max-width: 600px;
     max-height: 600px;
-    min-width: 300px;
-    min-height: 300px;
 }
 
 #drawingCanvas {
@@ -64,12 +81,11 @@ h1 {
     background: black;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
     display: block;
-    max-width: 600px;
-    max-height: 600px;
-    width: 100%;
-    height: auto;
     aspect-ratio: 1 / 1;
+    width: 100%;
+    height: 100%;
     margin: 0 auto;
+    box-sizing: border-box;
 }
 
 .controls {
@@ -152,43 +168,69 @@ button {
     margin: 0;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 600px) {
     .drawing-area {
-        padding: 10px;
+        padding: 2vw;
+        margin: 0 auto 20px auto;
+        width: min(98vw, 80vh);
+        height: min(98vw, 80vh);
+        min-width: 0;
+        min-height: 0;
+        max-width: none;
+        max-height: none;
+        box-sizing: border-box;
     }
-    
+    #drawingCanvas {
+        width: 100%;
+        height: 100%;
+        margin: 0 auto;
+        max-width: none;
+        max-height: none;
+    }
     .container {
         max-width: 100vw;
+        width: 100%;
     }
 }
 
 @media (max-width: 480px) {
     .container {
-        padding: 5px;
+        padding: 0;
         max-width: 100vw;
+        width: 100%;
     }
-    
     h1 {
         font-size: 18px;
     }
-    
     .drawing-area {
         padding: 2vw;
+        margin: 0 auto 20px auto;
+        width: min(98vw, 80vh);
+        height: min(98vw, 80vh);
+        min-width: 0;
+        min-height: 0;
+        max-width: none;
+        max-height: none;
+        box-sizing: border-box;
     }
-    
+    #drawingCanvas {
+        width: 100%;
+        height: 100%;
+        margin: 0 auto;
+        max-width: none;
+        max-height: none;
+    }
     .controls {
         flex-direction: column;
         align-items: center;
         gap: 10px;
     }
-    
     button {
         width: 100%;
         max-width: 200px;
         font-size: 15px;
         padding: 10px 0;
     }
-    
     .info {
         font-size: 12px;
     }

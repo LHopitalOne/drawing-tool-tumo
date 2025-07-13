@@ -147,8 +147,7 @@ class DrawingTool {
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
                     headers: {
-                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ', // Replace with your actual key
-                        'Content-Type': 'image/jpeg'
+                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
                     },
                     body: formData
                 });
@@ -176,7 +175,7 @@ class DrawingTool {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
             }
-        }, 'image/jpg');
+        }, 'image/jpeg', 0.95);
     }
 
     async handleFileUpload(e) {
@@ -187,16 +186,16 @@ class DrawingTool {
             const filename = `${uuid}.jpg`;
             const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
             const uploadUrl = supabaseUrl + filename;
-            // Convert to jpg if not already
+            // Convert to JPEG if not already
             let uploadBlob = file;
-            if (!file.type.includes('jpg')) {
+            if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
                 const img = await this.fileToImage(file);
                 const canvas = document.createElement('canvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
-                uploadBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg'));
+                uploadBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
             }
             const formData = new FormData();
             formData.append('file', uploadBlob, filename);

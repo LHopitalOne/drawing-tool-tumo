@@ -156,10 +156,7 @@ button {
     .drawing-area {
         padding: 10px;
     }
-    #drawingCanvas {
-        max-width: 98vw;
-        max-height: 70vw;
-    }
+    
     .container {
         max-width: 100vw;
     }
@@ -177,11 +174,6 @@ button {
     
     .drawing-area {
         padding: 2vw;
-    }
-    
-    #drawingCanvas {
-        max-width: 98vw;
-        max-height: 98vw;
     }
     
     .controls {

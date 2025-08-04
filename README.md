@@ -2,6 +2,9 @@
 
 A simple web-based drawing tool that creates 800x800 pixel images with a white brush on a black canvas. Perfect for creating quick sketches that can be easily shared and used in Python programs. You can also upload your own images to the cloud.
 
+Try it yourself: https://lhopitalone.github.io/drawing-tool-tumo
+> **Note:** The tool is in Armenian:
+
 ## Features
 
 - **600x600 pixel canvas** with black background

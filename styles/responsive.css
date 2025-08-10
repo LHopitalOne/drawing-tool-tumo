@@ -1,0 +1,106 @@
+@media (max-width: 600px) {
+  .drawing-area {
+    padding: 2vw;
+    margin: 0 auto 20px auto;
+    width: min(98vw, 80vh);
+    height: min(98vw, 80vh);
+    min-width: 0;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    box-sizing: border-box;
+  }
+
+  #drawingCanvas {
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    max-width: none;
+    max-height: none;
+  }
+
+  .container {
+    max-width: 100vw;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0;
+    max-width: 100vw;
+    width: 100%;
+  }
+  h1 {
+    font-size: 18px;
+  }
+  .drawing-area {
+    padding: 2vw;
+    margin: 0 auto 20px auto;
+    width: min(98vw, 80vh);
+    height: min(98vw, 80vh);
+    min-width: 0;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    box-sizing: border-box;
+  }
+  #drawingCanvas {
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    max-width: none;
+    max-height: none;
+  }
+  .controls {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .control-button {
+    width: 100%;
+    max-width: 200px;
+    font-size: 15px;
+    padding: 10px 0;
+  }
+  .info {
+    font-size: 12px;
+  }
+
+  /* Modal responsive styles */
+  .modal-content {
+    margin: 10% auto;
+    padding: 20px;
+    width: 95%;
+  }
+
+  .modal-content h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    font-size: 14px;
+  }
+
+  .form-group input[type="number"],
+  .form-group input[type="color"] {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .radio-group {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .radio-label {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .submit-btn {
+    padding: 12px;
+    font-size: 16px;
+  }
+}

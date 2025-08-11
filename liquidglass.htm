@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+
+<body
+    style="background: url('https://upload.wikimedia.org/wikipedia/commons/b/b6/Image_created_with_a_mobile_phone.png'); background-size: 1000px; height: 200vh">
+
+    <div class="card">
+        <slot></slot>
+    </div>
+
+    <svg style="display:none;">
+        <filter id="displacementFilter">
+            <feTurbulence type="turbulence" baseFrequency="0.0" />
+
+            <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="200" />
+        </filter>
+    </svg>
+
+
+    <div
+        style="position: fixed; width: 120px; height: 40px; display: flex; align-items: center; justify-content: center; color: white; font-family: 'Tahoma'; left: 50vw; top: 50vh; transform: translateX(-50%) translateY(-50%); box-shadow: -8px -10px 46px #0000005f; border-radius: 20px; backdrop-filter: blur(2px) brightness(1.1) url(#displacementFilter); border-color: #e1e1e155; border-width: 0.5px 1.5px; border-style: solid;">
+        miban
+    </div>
+
+</body>
+
+</html>

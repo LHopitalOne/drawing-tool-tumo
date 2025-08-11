@@ -140,6 +140,16 @@
   margin-top: 12px;
 }
 
+.settings-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .brush-group {
   display: grid;
   grid-template-columns: repeat(6, 1fr);

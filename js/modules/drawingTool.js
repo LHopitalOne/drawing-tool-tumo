@@ -225,6 +225,27 @@ class DrawingTool {
         Object.values(this.brushes).forEach(b => b.setSize(val));
       });
     }
+    
+    // Canvas background color control
+    const canvasBgColorInput = document.getElementById('canvasBackgroundColor');
+    if (canvasBgColorInput) {
+      // Sync with initial setup modal
+      const initialBgColor = document.getElementById('backgroundColor');
+      if (initialBgColor) {
+        canvasBgColorInput.value = initialBgColor.value;
+      }
+      
+      canvasBgColorInput.addEventListener('input', (e) => {
+        const newColor = e.target.value;
+        this.changeBackgroundColor(newColor);
+        
+        // Also update the initial setup modal if it exists
+        if (initialBgColor) {
+          initialBgColor.value = newColor;
+        }
+      });
+    }
+    
     if (brushButtons.length) {
       brushButtons.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -381,6 +402,21 @@ class DrawingTool {
   clearCanvas() {
     this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
     this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    this.render();
+  }
+
+  changeBackgroundColor(color) {
+    // Update the background color input if it exists
+    const bgColorInput = document.getElementById('backgroundColor');
+    if (bgColorInput) {
+      bgColorInput.value = color;
+    }
+    
+    // Redraw the entire canvas with new background color
+    this.contentCtx.fillStyle = color;
+    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    
+    // Re-render to show the change
     this.render();
   }
 

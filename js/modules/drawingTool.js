@@ -21,6 +21,7 @@ class DrawingTool {
 
     // Interaction state
     this.isDrawing = false;
+    this.isDragging = false;
     this.lastX = 0;
     this.lastY = 0;
     this.brushRadius = 30;
@@ -35,6 +36,13 @@ class DrawingTool {
     this.fitScale = 1; // scale that fits content into viewport
     this.offsetX = 0;
     this.offsetY = 0;
+
+    // Dragging state
+    this.isSpacePressed = false;
+    this.dragStartX = 0;
+    this.dragStartY = 0;
+    this.dragStartOffsetX = 0;
+    this.dragStartOffsetY = 0;
 
     // Bind resize handler
     this.handleResize = this.handleResize.bind(this);
@@ -159,6 +167,10 @@ class DrawingTool {
     // Wheel zoom (Photoshop-like zoom towards cursor)
     this.viewportCanvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
 
+    // Keyboard events for spacebar dragging
+    document.addEventListener('keydown', this.handleKeyDown.bind(this));
+    document.addEventListener('keyup', this.handleKeyUp.bind(this));
+
     // Controls
     document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
     document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
@@ -210,7 +222,7 @@ class DrawingTool {
       sizeInput.addEventListener('input', (e) => {
         const val = Math.max(1, Math.min(400, parseInt(e.target.value || '1', 10)));
         this.brushRadius = val;
-        Object.values(this.brushes).forEach(b => b.setSize(this.brushRadius));
+        Object.values(this.brushes).forEach(b => b.setSize(val));
       });
     }
     if (brushButtons.length) {
@@ -227,6 +239,22 @@ class DrawingTool {
         this.fitContentToViewport();
         this.render();
       });
+    }
+  }
+
+  handleKeyDown(e) {
+    if (e.code === 'Space' && !this.isSpacePressed) {
+      e.preventDefault();
+      this.isSpacePressed = true;
+      this.viewportCanvas.style.cursor = 'grab';
+    }
+  }
+
+  handleKeyUp(e) {
+    if (e.code === 'Space') {
+      this.isSpacePressed = false;
+      this.isDragging = false;
+      this.viewportCanvas.style.cursor = 'default';
     }
   }
 
@@ -253,6 +281,18 @@ class DrawingTool {
   }
 
   startDrawing(e) {
+    if (this.isSpacePressed) {
+      // Start dragging
+      this.isDragging = true;
+      this.dragStartX = e.clientX;
+      this.dragStartY = e.clientY;
+      this.dragStartOffsetX = this.offsetX;
+      this.dragStartOffsetY = this.offsetY;
+      this.viewportCanvas.style.cursor = 'grabbing';
+      return;
+    }
+
+    // Normal drawing
     this.isDrawing = true;
     const pos = this.getMousePos(e);
     this.lastX = pos.x;
@@ -263,6 +303,16 @@ class DrawingTool {
   }
 
   draw(e) {
+    if (this.isDragging) {
+      // Handle canvas dragging
+      const deltaX = e.clientX - this.dragStartX;
+      const deltaY = e.clientY - this.dragStartY;
+      this.offsetX = this.dragStartOffsetX + deltaX;
+      this.offsetY = this.dragStartOffsetY + deltaY;
+      this.render();
+      return;
+    }
+
     if (!this.isDrawing) return;
     e.preventDefault();
     const pos = this.getMousePos(e);
@@ -278,21 +328,52 @@ class DrawingTool {
     e.preventDefault();
     const pos = this.getTouchPos(e);
     if (e.type === 'touchstart') {
+      if (this.isSpacePressed) {
+        // Start dragging
+        this.isDragging = true;
+        this.dragStartX = e.touches[0].clientX;
+        this.dragStartY = e.touches[0].clientY;
+        this.dragStartOffsetX = this.offsetX;
+        this.dragStartOffsetY = this.offsetY;
+        return;
+      }
+
+      // Normal drawing
       this.isDrawing = true;
       this.lastX = pos.x;
       this.lastY = pos.y;
       this.getActiveBrush().beginStroke(pos.x, pos.y);
       this.getActiveBrush().strokeTo(pos.x, pos.y, pos.x, pos.y);
       this.render();
-    } else if (e.type === 'touchmove' && this.isDrawing) {
-      this.getActiveBrush().strokeTo(this.lastX, this.lastY, pos.x, pos.y);
-      this.lastX = pos.x;
-      this.lastY = pos.y;
-      this.render();
+    } else if (e.type === 'touchmove') {
+      if (this.isDragging) {
+        // Handle canvas dragging
+        const deltaX = e.touches[0].clientX - this.dragStartX;
+        const deltaY = e.touches[0].clientY - this.dragStartY;
+        this.offsetX = this.dragStartOffsetX + deltaX;
+        this.offsetY = this.dragStartOffsetY + deltaY;
+        this.render();
+        return;
+      }
+
+      if (this.isDrawing) {
+        this.getActiveBrush().strokeTo(this.lastX, this.lastY, pos.x, pos.y);
+        this.lastX = pos.x;
+        this.lastY = pos.y;
+        this.render();
+      }
     }
   }
 
   stopDrawing() {
+    if (this.isDragging) {
+      this.isDragging = false;
+      if (this.isSpacePressed) {
+        this.viewportCanvas.style.cursor = 'grab';
+      }
+      return;
+    }
+
     this.isDrawing = false;
     if (this.getActiveBrush().endStroke) this.getActiveBrush().endStroke();
   }

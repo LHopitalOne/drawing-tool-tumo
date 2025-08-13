@@ -27,6 +27,9 @@ class DrawingTool {
     this.brushRadius = 30;
     this.brushColor = '#ffffff';
 
+    // Symmetry
+    this.symmetryAxes = 0; // 0 = off; N>0 draws N rotated copies around center
+
     // Active brush
     this.brushes = {};
     this.activeBrushKey = 'soft';
@@ -43,6 +46,19 @@ class DrawingTool {
     this.dragStartY = 0;
     this.dragStartOffsetX = 0;
     this.dragStartOffsetY = 0;
+
+    // Pinch zoom state
+    this.isPinching = false;
+    this.pinchStartDistance = 0;
+    this.pinchStartScale = 1;
+    this.pinchWorldMidX = 0;
+    this.pinchWorldMidY = 0;
+
+    // Touch gesture detection
+    this.touchStartTime = 0;
+    this.touchStartX = 0;
+    this.touchStartY = 0;
+    this.isTouchGesture = false;
 
     // Bind resize handler
     this.handleResize = this.handleResize.bind(this);
@@ -164,7 +180,7 @@ class DrawingTool {
     this.viewportCanvas.addEventListener('touchmove', this.handleTouch.bind(this), { passive: false });
     this.viewportCanvas.addEventListener('touchend', this.stopDrawing.bind(this));
 
-    // Wheel zoom (Photoshop-like zoom towards cursor)
+    // Wheel: handle desktop pinch-to-zoom (ctrlKey=true) only; normal wheel scroll passes through
     this.viewportCanvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
 
     // Keyboard events for spacebar dragging
@@ -188,6 +204,7 @@ class DrawingTool {
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const colorInput = document.getElementById('brushColorInput');
     const sizeInput = document.getElementById('brushSizeInput');
+    const symmetryAxesInput = document.getElementById('symmetryAxesInput');
     const fitBtn = document.getElementById('fitViewBtn');
     const brushButtons = Array.from(document.querySelectorAll('.brush-btn'));
 
@@ -223,6 +240,13 @@ class DrawingTool {
         const val = Math.max(1, Math.min(400, parseInt(e.target.value || '1', 10)));
         this.brushRadius = val;
         Object.values(this.brushes).forEach(b => b.setSize(val));
+      });
+    }
+    if (symmetryAxesInput) {
+      symmetryAxesInput.value = String(this.symmetryAxes);
+      symmetryAxesInput.addEventListener('input', (e) => {
+        const val = Math.max(0, Math.min(64, parseInt(e.target.value || '0', 10)));
+        this.symmetryAxes = val | 0;
       });
     }
     
@@ -301,6 +325,54 @@ class DrawingTool {
     };
   }
 
+  // Compute midpoint of two touches in screen space (CSS px)
+  _getTouchesMidpoint(e) {
+    const rect = this.viewportCanvas.getBoundingClientRect();
+    const t0 = e.touches[0];
+    const t1 = e.touches[1];
+    const mx = ((t0.clientX + t1.clientX) / 2) - rect.left;
+    const my = ((t0.clientY + t1.clientY) / 2) - rect.top;
+    return { mx, my };
+  }
+
+  // Distance between first two touches in screen space (CSS px)
+  _getTouchesDistance(e) {
+    const t0 = e.touches[0];
+    const t1 = e.touches[1];
+    const dx = t1.clientX - t0.clientX;
+    const dy = t1.clientY - t0.clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  _beginPinch(e) {
+    if (!e.touches || e.touches.length < 2) return;
+    this.isPinching = true;
+    this.pinchStartDistance = this._getTouchesDistance(e);
+    this.pinchStartScale = this.scale;
+    const { mx, my } = this._getTouchesMidpoint(e);
+    // Store the world coords under the midpoint to keep it stable while zooming
+    this.pinchWorldMidX = (mx - this.offsetX) / this.scale;
+    this.pinchWorldMidY = (my - this.offsetY) / this.scale;
+  }
+
+  _updatePinch(e) {
+    if (!this.isPinching || !e.touches || e.touches.length < 2) return;
+    const currentDistance = this._getTouchesDistance(e);
+    if (this.pinchStartDistance <= 0) return;
+    const factor = currentDistance / this.pinchStartDistance;
+    // Clamp scale
+    const minScale = Math.max(this.fitScale * 0.25, 0.05);
+    const maxScale = 32;
+    const newScale = Math.min(maxScale, Math.max(minScale, this.pinchStartScale * factor));
+
+    // Adjust offset so the world point under pinch midpoint remains stationary
+    const { mx, my } = this._getTouchesMidpoint(e);
+    this.scale = newScale;
+    this.offsetX = mx - this.pinchWorldMidX * this.scale;
+    this.offsetY = my - this.pinchWorldMidY * this.scale;
+    this.render();
+  }
+
   startDrawing(e) {
     if (this.isSpacePressed) {
       // Start dragging
@@ -318,8 +390,7 @@ class DrawingTool {
     const pos = this.getMousePos(e);
     this.lastX = pos.x;
     this.lastY = pos.y;
-    this.getActiveBrush().beginStroke(pos.x, pos.y);
-    this.getActiveBrush().strokeTo(pos.x, pos.y, pos.x, pos.y);
+    this._symmetryBeginAndDot(pos.x, pos.y);
     this.render();
   }
 
@@ -337,7 +408,7 @@ class DrawingTool {
     if (!this.isDrawing) return;
     e.preventDefault();
     const pos = this.getMousePos(e);
-    this.getActiveBrush().strokeTo(this.lastX, this.lastY, pos.x, pos.y);
+    this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
     this.lastX = pos.x;
     this.lastY = pos.y;
     this.render();
@@ -349,6 +420,21 @@ class DrawingTool {
     e.preventDefault();
     const pos = this.getTouchPos(e);
     if (e.type === 'touchstart') {
+      // Record touch start for gesture detection
+      this.touchStartTime = Date.now();
+      this.touchStartX = e.touches[0].clientX;
+      this.touchStartY = e.touches[0].clientY;
+      this.isTouchGesture = false;
+
+      // Begin pinch gesture if two fingers
+      if (e.touches && e.touches.length >= 2) {
+        this._beginPinch(e);
+        // Ensure we are not in drawing/dragging mode during pinch
+        this.isDrawing = false;
+        this.isDragging = false;
+        this.isTouchGesture = true;
+        return;
+      }
       if (this.isSpacePressed) {
         // Start dragging
         this.isDragging = true;
@@ -359,14 +445,20 @@ class DrawingTool {
         return;
       }
 
-      // Normal drawing
+      // Start drawing immediately for single-finger touch
       this.isDrawing = true;
       this.lastX = pos.x;
       this.lastY = pos.y;
-      this.getActiveBrush().beginStroke(pos.x, pos.y);
-      this.getActiveBrush().strokeTo(pos.x, pos.y, pos.x, pos.y);
+      this._symmetryBeginAndDot(pos.x, pos.y);
       this.render();
     } else if (e.type === 'touchmove') {
+      // Handle active pinch gesture
+      if (this.isPinching && e.touches && e.touches.length >= 2) {
+        this._updatePinch(e);
+        return;
+      }
+      // Single-finger moves are for drawing; two-finger handled above
+
       if (this.isDragging) {
         // Handle canvas dragging
         const deltaX = e.touches[0].clientX - this.dragStartX;
@@ -378,11 +470,22 @@ class DrawingTool {
       }
 
       if (this.isDrawing) {
-        this.getActiveBrush().strokeTo(this.lastX, this.lastY, pos.x, pos.y);
+        this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
         this.lastX = pos.x;
         this.lastY = pos.y;
         this.render();
       }
+    } else if (e.type === 'touchend' || e.type === 'touchcancel') {
+      // End pinch if finger count drops below two
+      if (this.isPinching && (!e.touches || e.touches.length < 2)) {
+        this.isPinching = false;
+        return;
+      }
+      // Reset gesture state
+      this.isTouchGesture = false;
+      this.isDragging = false;
+      this.dragStartX = 0;
+      this.dragStartY = 0;
     }
   }
 
@@ -396,7 +499,8 @@ class DrawingTool {
     }
 
     this.isDrawing = false;
-    if (this.getActiveBrush().endStroke) this.getActiveBrush().endStroke();
+    const brush = this.getActiveBrush();
+    if (brush.endStroke) brush.endStroke();
   }
 
   clearCanvas() {
@@ -575,29 +679,47 @@ class DrawingTool {
   }
 
   handleWheel(e) {
-    e.preventDefault();
     const rect = this.viewportCanvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    // Desktop pinch-to-zoom (ctrlKey=true)
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    const worldXBefore = (mouseX - this.offsetX) / this.scale;
-    const worldYBefore = (mouseY - this.offsetY) / this.scale;
+      const worldXBefore = (mouseX - this.offsetX) / this.scale;
+      const worldYBefore = (mouseY - this.offsetY) / this.scale;
 
-    // Zoom factor: similar to Photoshop, smooth exponential zoom
-    const zoomIntensity = 0.0015; // smaller = slower zoom
-    const factor = Math.exp(-e.deltaY * zoomIntensity);
+      // Zoom factor: smooth exponential zoom
+      const zoomIntensity = 0.005 ; // smaller = slower zoom
+      const factor = Math.exp(-e.deltaY * zoomIntensity);
 
-    // Clamp scale
-    const minScale = Math.max(this.fitScale * 0.25, 0.05);
-    const maxScale = 32;
-    const newScale = Math.min(maxScale, Math.max(minScale, this.scale * factor));
-    const scaleChange = newScale / this.scale;
-    this.scale = newScale;
+      // Clamp scale
+      const minScale = Math.max(this.fitScale * 0.25, 0.05);
+      const maxScale = 32;
+      const newScale = Math.min(maxScale, Math.max(minScale, this.scale * factor));
+      this.scale = newScale;
 
-    // Adjust offset so the world point under cursor stays stationary in screen space
-    this.offsetX = mouseX - worldXBefore * this.scale;
-    this.offsetY = mouseY - worldYBefore * this.scale;
+      // Keep world point under cursor fixed
+      this.offsetX = mouseX - worldXBefore * this.scale;
+      this.offsetY = mouseY - worldYBefore * this.scale;
 
+      this.render();
+      return;
+    }
+
+    // Otherwise: pan the canvas with wheel deltas (vertical and horizontal)
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 32 : (e.deltaMode === 2 ? rect.height : 1);
+    let dx = e.deltaX;
+    let dy = e.deltaY;
+    // Many mice emit horizontal pan as Shift+vertical; map that when deltaX is 0
+    if (e.shiftKey && Math.abs(dx) < 1 && Math.abs(dy) >= 1) {
+      dx = dy;
+      dy = 0;
+    }
+    // Scroll down should move content up (inverse relationship)
+    this.offsetX -= dx * unit;
+    this.offsetY -= dy * unit;
     this.render();
   }
 
@@ -627,6 +749,52 @@ class DrawingTool {
 
   getActiveBrush() {
     return this.brushes[this.activeBrushKey] || this.brushes.soft;
+  }
+
+  // --- Symmetry helpers ---
+  _getCanvasCenter() {
+    return { x: this.contentCanvas.width / 2, y: this.contentCanvas.height / 2 };
+  }
+
+  _rotatePointAround(x, y, cx, cy, angleRad) {
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    const dx = x - cx;
+    const dy = y - cy;
+    return { x: cx + dx * cosA - dy * sinA, y: cy + dx * sinA + dy * cosA };
+  }
+
+  _symmetryBeginAndDot(x, y) {
+    const brush = this.getActiveBrush();
+    const axes = this.symmetryAxes | 0;
+    if (!axes) {
+      brush.beginStroke(x, y);
+      brush.strokeTo(x, y, x, y);
+      return;
+    }
+    const { x: cx, y: cy } = this._getCanvasCenter();
+    for (let i = 0; i < axes; i++) {
+      const angle = (i * Math.PI * 2) / axes;
+      const p = this._rotatePointAround(x, y, cx, cy, angle);
+      brush.beginStroke(p.x, p.y);
+      brush.strokeTo(p.x, p.y, p.x, p.y);
+    }
+  }
+
+  _symmetryStroke(x0, y0, x1, y1) {
+    const brush = this.getActiveBrush();
+    const axes = this.symmetryAxes | 0;
+    if (!axes) {
+      brush.strokeTo(x0, y0, x1, y1);
+      return;
+    }
+    const { x: cx, y: cy } = this._getCanvasCenter();
+    for (let i = 0; i < axes; i++) {
+      const angle = (i * Math.PI * 2) / axes;
+      const p0 = this._rotatePointAround(x0, y0, cx, cy, angle);
+      const p1 = this._rotatePointAround(x1, y1, cx, cy, angle);
+      brush.strokeTo(p0.x, p0.y, p1.x, p1.y);
+    }
   }
 }
 

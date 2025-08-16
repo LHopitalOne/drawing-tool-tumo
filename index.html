@@ -65,7 +65,6 @@
                         <path d="M5 6H15M8 9V13M12 9V13M7 6V4.5C7 3.67157 7.67157 3 8.5 3H11.5C12.3284 3 13 3.67157 13 4.5V6M4 6H16V16.5C16 17.3284 15.3284 18 14.5 18H5.5C4.67157 18 4 17.3284 4 16.5V6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </span>
-                Մաքրել տարածքը
             </button>
             <button id="saveBtn" class="control-button">
                 <span class="icon" aria-hidden="true">
@@ -73,15 +72,13 @@
                         <path d="M10 3V13M10 13L6 9M10 13L14 9M4 17H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </span>
-                Պահպանել
             </button>
             <button id="uploadBtn" class="control-button">
                 <span class="icon" aria-hidden="true">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M10 17V7M10 7L6 11M10 7L14 11M4 17H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10 19V7M10 7L6 11M10 7L14 11M4 19H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </span>
-                Ներմուծել նկար
             </button>
             <input type="file" id="fileInput" accept="image/*" style="display:none" />
         </div>
@@ -142,6 +139,13 @@
           </div>
       </div>
   </div>
+
+  <svg style="display:none;">
+    <filter id="displacementFilter">
+      <feTurbulence type="turbulence" baseFrequency="0.0" />
+      <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="300" />
+    </filter>
+  </svg>
 
   <script type="module" src="js/main.js"></script>
 </body>

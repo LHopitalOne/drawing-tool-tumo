@@ -7,7 +7,7 @@ import {
   PencilBrush,
   EraserBrush
 } from './brushes/index.js';
-import { generateUUID as createUUID } from './utils.js';
+import { generateUUID as createUUID, hexToRgb } from './utils.js';
 
 class DrawingTool {
   constructor() {
@@ -27,12 +27,27 @@ class DrawingTool {
     this.brushRadius = 30;
     this.brushColor = '#ffffff';
 
+    // Background color (rendered behind content)
+    this.backgroundColor = '#000000';
+    // Tracks whether the content canvas has the background color baked into pixels
+    // Older behavior painted background onto content; we convert on first change
+    this._contentHasBakedBackground = true;
+
     // Symmetry
     this.symmetryAxes = 0; // 0 = off; N>0 draws N rotated copies around center
 
     // Active brush
     this.brushes = {};
     this.activeBrushKey = 'soft';
+    // Per-brush settings
+    this.brushSettings = {
+      soft:   { size: this.brushRadius, color: this.brushColor },
+      pen:    { size: this.brushRadius, color: this.brushColor },
+      air:    { size: this.brushRadius, color: this.brushColor },
+      fountain:{ size: this.brushRadius, color: this.brushColor },
+      pencil: { size: this.brushRadius, color: this.brushColor },
+      eraser: { size: this.brushRadius, color: this.brushColor },
+    };
 
     // View transform (screen = world * scale + offset)
     this.scale = 1;
@@ -60,10 +75,31 @@ class DrawingTool {
     this.touchStartY = 0;
     this.isTouchGesture = false;
 
+    // Radial (settings) selection state
+    this.isRadialOpen = false;
+    this.isRightMouseSelecting = false;
+    this.currentRadialHoverEl = null;
+    this.longPressTimeoutId = null;
+    this.isLongPressSelecting = false;
+    this._docMouseMoveHandler = null;
+    this._docTouchMoveHandler = null;
+    this._docMouseUpHandler = null;
+
+    // Desktop hover preview state
+    this._isPointerInCanvas = false;
+    this._lastPointerClientX = 0;
+    this._lastPointerClientY = 0;
+
+    // Suppress next draw click after closing focus
+    this._suppressNextMouseDown = false;
+
     // Bind resize handler
     this.handleResize = this.handleResize.bind(this);
 
     this.setupModal();
+
+    // Expose for UI helpers
+    try { window.drawingTool = this; } catch(_) {}
   }
 
   setupModal() {
@@ -127,14 +163,18 @@ class DrawingTool {
   }
 
   init() {
-    // Initialize content canvas background and brush
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    // Initialize background and brush
+    this.backgroundColor = document.getElementById('backgroundColor').value;
+    // Keep content transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.contentCtx.strokeStyle = this.brushColor;
     this.contentCtx.lineWidth = 1;
     this.contentCtx.lineCap = 'round';
     this.contentCtx.lineJoin = 'round';
     this.initializeBrushes();
+
+    // New behavior: content has no baked background
+    this._contentHasBakedBackground = false;
 
     // Prepare viewport and fit content
     this.resizeViewportCanvas();
@@ -143,8 +183,9 @@ class DrawingTool {
   }
 
   initForUpload() {
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    this.backgroundColor = document.getElementById('backgroundColor').value;
+    // Keep content transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.contentCtx.strokeStyle = this.brushColor;
     this.contentCtx.lineWidth = 1;
     this.contentCtx.lineCap = 'round';
@@ -167,7 +208,11 @@ class DrawingTool {
       eraser: new EraserBrush(this.contentCtx, () => document.getElementById('backgroundColor').value),
     };
     // Sync base properties
-    Object.values(this.brushes).forEach(b => { b.setSize(this.brushRadius); b.setColor(this.brushColor); });
+    Object.entries(this.brushes).forEach(([key, b]) => {
+      const s = this.brushSettings[key] || { size: this.brushRadius, color: this.brushColor };
+      b.setSize(s.size);
+      if (b.setColor) b.setColor(s.color);
+    });
   }
 
   setupEventListeners() {
@@ -179,6 +224,9 @@ class DrawingTool {
     this.viewportCanvas.addEventListener('touchstart', this.handleTouch.bind(this), { passive: false });
     this.viewportCanvas.addEventListener('touchmove', this.handleTouch.bind(this), { passive: false });
     this.viewportCanvas.addEventListener('touchend', this.stopDrawing.bind(this));
+
+    // Prevent default context menu so right-click can be used for radial
+    window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 
     // Wheel: handle desktop pinch-to-zoom (ctrlKey=true) only; normal wheel scroll passes through
     this.viewportCanvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
@@ -198,6 +246,57 @@ class DrawingTool {
     // Resize viewport when window resizes
     window.addEventListener('resize', this.handleResize);
 
+    // Track pointer presence for desktop hover preview
+    this.viewportCanvas.addEventListener('mouseenter', (e) => {
+      this._isPointerInCanvas = true;
+    });
+    this.viewportCanvas.addEventListener('mouseleave', (e) => {
+      this._isPointerInCanvas = false;
+      this.render();
+    });
+    this.viewportCanvas.addEventListener('mousemove', (e) => {
+      this._lastPointerClientX = e.clientX;
+      this._lastPointerClientY = e.clientY;
+      if (!this.isDrawing && !this.isRadialOpen) this.render();
+    });
+
+    // Listen to size changes from radial focus UI
+    document.addEventListener('brush:size-change', (e) => {
+      const current = this.getBrushSettings(this.activeBrushKey);
+      const fallback = current ? current.size : 10;
+      const val = Math.max(1, Math.min(400, e.detail && e.detail.size ? e.detail.size : fallback));
+      this.brushSettings[this.activeBrushKey] = { ...current, size: val };
+      this.getActiveBrush().setSize(val);
+      // Sync size input if present
+      const sizeInputEl = document.getElementById('brushSizeInput');
+      if (sizeInputEl) sizeInputEl.value = String(val);
+      this.render();
+    });
+
+    // Select brush from radial focus UI
+    document.addEventListener('brush:select', (e) => {
+      const key = e.detail && e.detail.key ? e.detail.key : null;
+      if (!key) return;
+      this.setActiveBrushByKey(key);
+      if (window.brushRing && window.brushRing.setButtonVisuals) window.brushRing.setButtonVisuals(this.activeBrushKey);
+    });
+
+    // Reset pointer states when focus exits
+    document.addEventListener('brush:focus-exit', () => {
+      this.resetPointerStates();
+      this.render();
+    });
+
+    // Clicking canvas exits focus mode if any
+    this.viewportCanvas.addEventListener('mousedown', (ev) => {
+      const focusActiveNow = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+      if (focusActiveNow) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
+      }
+    });
+
     // Floating settings UI
     const fabToggle = document.getElementById('fabToggle');
     const settingsPanel = document.getElementById('settingsPanel');
@@ -206,20 +305,9 @@ class DrawingTool {
     const sizeInput = document.getElementById('brushSizeInput');
     const symmetryAxesInput = document.getElementById('symmetryAxesInput');
     const fitBtn = document.getElementById('fitViewBtn');
-    const brushButtons = Array.from(document.querySelectorAll('.brush-btn'));
+    const brushGroupEl = document.querySelector('.brush-group');
 
-    if (fabToggle && settingsPanel) {
-      fabToggle.addEventListener('click', () => {
-        const isHidden = settingsPanel.hasAttribute('hidden');
-        if (isHidden) {
-          settingsPanel.removeAttribute('hidden');
-          fabToggle.setAttribute('aria-expanded', 'true');
-        } else {
-          settingsPanel.setAttribute('hidden', '');
-          fabToggle.setAttribute('aria-expanded', 'false');
-        }
-      });
-    }
+    // Floating button removed; open via right-click/long-press instead
     if (closeSettingsBtn && settingsPanel && fabToggle) {
       closeSettingsBtn.addEventListener('click', () => {
         settingsPanel.setAttribute('hidden', '');
@@ -228,18 +316,35 @@ class DrawingTool {
     }
 
     if (colorInput) {
-      colorInput.value = this.brushColor;
+      // Initialize color input with active brush color
+      colorInput.value = this.getBrushSettings(this.activeBrushKey).color;
       colorInput.addEventListener('input', (e) => {
-        this.brushColor = e.target.value || '#ffffff';
-        Object.values(this.brushes).forEach(b => b.setColor(this.brushColor));
+        const newColor = e.target.value || '#ffffff';
+        // Update only active brush color
+        this.brushSettings[this.activeBrushKey] = {
+          ...this.getBrushSettings(this.activeBrushKey),
+          color: newColor,
+        };
+        const activeBrush = this.getActiveBrush();
+        if (activeBrush.setColor) activeBrush.setColor(newColor);
+        // Update focus color dot if open
+        if (window.brushRing && window.brushRing.updateFocusColor) {
+          window.brushRing.updateFocusColor(newColor);
+        }
       });
     }
     if (sizeInput) {
-      sizeInput.value = String(this.brushRadius);
+      sizeInput.value = String(this.getBrushSettings(this.activeBrushKey).size);
       sizeInput.addEventListener('input', (e) => {
         const val = Math.max(1, Math.min(400, parseInt(e.target.value || '1', 10)));
-        this.brushRadius = val;
-        Object.values(this.brushes).forEach(b => b.setSize(val));
+        // Update only active brush size
+        this.brushSettings[this.activeBrushKey] = {
+          ...this.getBrushSettings(this.activeBrushKey),
+          size: val,
+        };
+        const activeBrush = this.getActiveBrush();
+        activeBrush.setSize(val);
+        this.render();
       });
     }
     if (symmetryAxesInput) {
@@ -270,13 +375,21 @@ class DrawingTool {
       });
     }
     
-    if (brushButtons.length) {
-      brushButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          brushButtons.forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
-          this.activeBrushKey = btn.getAttribute('data-brush') || 'soft';
-        });
+    if (brushGroupEl) {
+      brushGroupEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('.brush-btn');
+        if (!btn || !brushGroupEl.contains(btn)) return;
+        this.activeBrushKey = btn.getAttribute('data-brush') || 'soft';
+        this._applyActiveBrushSettingsToUIAndBrush();
+        if (window.brushRing && window.brushRing.setButtonVisuals) {
+          window.brushRing.setButtonVisuals(this.activeBrushKey);
+        }
+      });
+      brushGroupEl.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.brush-btn')) {
+          e.preventDefault();
+          e.target.click();
+        }
       });
     }
     if (fitBtn) {
@@ -374,6 +487,34 @@ class DrawingTool {
   }
 
   startDrawing(e) {
+    // Block drawing while focus mode is active; close focus instead
+    const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+    if (focusActive) {
+      e.preventDefault();
+      if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
+      // Only consume this event; do not suppress future clicks
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      return;
+    }
+    if (this._suppressNextMouseDown) {
+      this._suppressNextMouseDown = false;
+      e.preventDefault();
+      return;
+    }
+    // Right-click opens radial selection and suspends drawing
+    if (e && e.button === 2) {
+      this._openRadialAt(e.clientX, e.clientY);
+      this.isRightMouseSelecting = true;
+      // Track mouseup anywhere to finalize selection
+      this._docMouseUpHandler = (ev) => {
+        const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+        if (!focusActive) {
+          this._finalizeRadialSelection(ev);
+        }
+      };
+      document.addEventListener('mouseup', this._docMouseUpHandler, { once: true });
+      return;
+    }
     if (this.isSpacePressed) {
       // Start dragging
       this.isDragging = true;
@@ -395,6 +536,19 @@ class DrawingTool {
   }
 
   draw(e) {
+    // Do nothing while focus mode is active
+    if (window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive()) {
+      return;
+    }
+    // While radial is open, update hover selection and skip drawing
+    if (this.isRadialOpen) {
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        this._updateRadialHover(clientX, clientY);
+      }
+      return;
+    }
     if (this.isDragging) {
       // Handle canvas dragging
       const deltaX = e.clientX - this.dragStartX;
@@ -418,6 +572,14 @@ class DrawingTool {
 
   handleTouch(e) {
     e.preventDefault();
+    // Block drawing while focus mode is active; close focus instead
+    const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+    if (focusActive) {
+      if (e.type === 'touchstart') {
+        if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
+      }
+      return;
+    }
     const pos = this.getTouchPos(e);
     if (e.type === 'touchstart') {
       // Record touch start for gesture detection
@@ -445,19 +607,27 @@ class DrawingTool {
         return;
       }
 
-      // Start drawing immediately for single-finger touch
-      this.isDrawing = true;
-      this.lastX = pos.x;
-      this.lastY = pos.y;
-      this._symmetryBeginAndDot(pos.x, pos.y);
-      this.render();
+      // Schedule long-press to open radial; defer drawing until move
+      this.isDrawing = false;
+      this.isLongPressSelecting = false;
+      if (this.longPressTimeoutId) clearTimeout(this.longPressTimeoutId);
+      const startClientX = e.touches[0].clientX;
+      const startClientY = e.touches[0].clientY;
+      this.longPressTimeoutId = setTimeout(() => {
+        // If still single touch and not dragging/pinching, open radial
+        if (!this.isDragging && !this.isPinching) {
+          this._openRadialAt(startClientX, startClientY);
+          this.isLongPressSelecting = true;
+          this._updateRadialHover(startClientX, startClientY);
+        }
+      }, 400);
     } else if (e.type === 'touchmove') {
       // Handle active pinch gesture
       if (this.isPinching && e.touches && e.touches.length >= 2) {
         this._updatePinch(e);
         return;
       }
-      // Single-finger moves are for drawing; two-finger handled above
+      // Single-finger moves are for drawing or radial selection; two-finger handled above
 
       if (this.isDragging) {
         // Handle canvas dragging
@@ -468,7 +638,21 @@ class DrawingTool {
         this.render();
         return;
       }
-
+      const touch = e.touches[0];
+      if (this.isRadialOpen && this.isLongPressSelecting && touch) {
+        this._updateRadialHover(touch.clientX, touch.clientY);
+        return;
+      }
+      // If long-press hasn't triggered yet, start drawing on movement and cancel timer
+      if (!this.isDrawing && !this.isRadialOpen) {
+        if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
+        this.isDrawing = true;
+        this.lastX = pos.x;
+        this.lastY = pos.y;
+        this._symmetryBeginAndDot(pos.x, pos.y);
+        this.render();
+        return;
+      }
       if (this.isDrawing) {
         this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
         this.lastX = pos.x;
@@ -486,10 +670,27 @@ class DrawingTool {
       this.isDragging = false;
       this.dragStartX = 0;
       this.dragStartY = 0;
+      if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
+      if (this.isRadialOpen && this.isLongPressSelecting) {
+        const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+        if (!focusActive) {
+          this._finalizeRadialSelection();
+        }
+        return;
+      }
     }
   }
 
-  stopDrawing() {
+  stopDrawing(e) {
+    // If radial menu is open, only finalize on release, ignore mouseout
+    if (this.isRadialOpen) {
+      const type = e && e.type;
+      const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
+      if (!focusActive && (type === 'mouseup' || type === 'touchend' || type === 'touchcancel')) {
+        this._finalizeRadialSelection(e);
+      }
+      return;
+    }
     if (this.isDragging) {
       this.isDragging = false;
       if (this.isSpacePressed) {
@@ -503,9 +704,116 @@ class DrawingTool {
     if (brush.endStroke) brush.endStroke();
   }
 
+  // --- Radial settings helpers ---
+  _openRadialAt(clientX, clientY) {
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (!settingsPanel) return;
+    settingsPanel.style.left = `${clientX}px`;
+    settingsPanel.style.top = `${clientY}px`;
+    settingsPanel.removeAttribute('hidden');
+    this.isRadialOpen = true;
+
+    // Sync visuals with current active selection when opening
+    if (window.brushRing && window.brushRing.setButtonVisuals) {
+      window.brushRing.setButtonVisuals(this.activeBrushKey, null);
+    }
+
+    // Track cursor/finger globally while open
+    this._docMouseMoveHandler = (ev) => {
+      if (!this.isRadialOpen) return;
+      this._updateRadialHover(ev.clientX, ev.clientY);
+    };
+    document.addEventListener('mousemove', this._docMouseMoveHandler);
+
+    this._docTouchMoveHandler = (ev) => {
+      if (!this.isRadialOpen) return;
+      if (ev.touches && ev.touches[0]) {
+        this._updateRadialHover(ev.touches[0].clientX, ev.touches[0].clientY);
+      }
+    };
+    document.addEventListener('touchmove', this._docTouchMoveHandler, { passive: false });
+  }
+
+  _closeRadial() {
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (!settingsPanel) return;
+    settingsPanel.setAttribute('hidden', '');
+    this.isRadialOpen = false;
+    this.isRightMouseSelecting = false;
+    this.isLongPressSelecting = false;
+    this.currentRadialHoverEl = null;
+    if (this._docMouseMoveHandler) {
+      document.removeEventListener('mousemove', this._docMouseMoveHandler);
+      this._docMouseMoveHandler = null;
+    }
+    if (this._docTouchMoveHandler) {
+      document.removeEventListener('touchmove', this._docTouchMoveHandler);
+      this._docTouchMoveHandler = null;
+    }
+  }
+
+  _updateRadialHover(clientX, clientY) {
+    const brushGroupEl = document.querySelector('.brush-group');
+    if (!brushGroupEl) return;
+    
+    const btn = this._hitTestRadialButton(clientX, clientY);
+    
+    // If we're no longer hovering over any button, clear the current hover
+    if (!btn) {
+      if (this.currentRadialHoverEl) {
+        this.currentRadialHoverEl = null;
+        if (window.brushRing && window.brushRing.setButtonVisuals) {
+          window.brushRing.setButtonVisuals(this.activeBrushKey, null);
+        }
+      }
+      return;
+    }
+    
+    // If we're hovering over a different button, update the hover
+    if (this.currentRadialHoverEl !== btn) {
+      this.currentRadialHoverEl = btn;
+      if (window.brushRing && window.brushRing.setButtonVisuals) {
+        window.brushRing.setButtonVisuals(this.activeBrushKey, btn);
+      }
+    }
+  }
+
+  _finalizeRadialSelection(e) {
+    const brushGroupEl = document.querySelector('.brush-group');
+    if (!brushGroupEl) { this._closeRadial(); return; }
+    // If we have a hovered element, pick it; else try element under pointer
+    let targetBtn = this.currentRadialHoverEl;
+    if (!targetBtn && e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+      targetBtn = this._hitTestRadialButton(e.clientX, e.clientY);
+      if (targetBtn && !brushGroupEl.contains(targetBtn)) targetBtn = null;
+    }
+    if (targetBtn) {
+      this.activeBrushKey = targetBtn.getAttribute('data-brush') || 'soft';
+      this._applyActiveBrushSettingsToUIAndBrush();
+      if (window.brushRing && window.brushRing.setButtonVisuals) {
+        window.brushRing.setButtonVisuals(this.activeBrushKey);
+      }
+    }
+    this._closeRadial();
+  }
+
+  _hitTestRadialButton(clientX, clientY) {
+    const group = document.querySelector('.brush-group');
+    if (!group) return null;
+    const buttons = Array.from(group.querySelectorAll('.brush-btn'));
+    for (let i = 0; i < buttons.length; i++) {
+      const btn = buttons[i];
+      const rect = btn.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+        return btn;
+      }
+    }
+    return null;
+  }
+
   clearCanvas() {
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    // Clear drawing content to transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.render();
   }
 
@@ -515,17 +823,53 @@ class DrawingTool {
     if (bgColorInput) {
       bgColorInput.value = color;
     }
-    
-    // Redraw the entire canvas with new background color
-    this.contentCtx.fillStyle = color;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
-    
-    // Re-render to show the change
+
+    // If content still has a baked background, attempt to convert the previous
+    // background color to transparency so future background changes are instant.
+    if (this._contentHasBakedBackground) {
+      const prevColor = this.backgroundColor;
+      try {
+        this._unbakeBackgroundColor(prevColor);
+        this._contentHasBakedBackground = false;
+      } catch (_) {
+        // If conversion fails, continue; user will still see new bg behind content
+      }
+    }
+
+    // Update background color and re-render
+    this.backgroundColor = color;
     this.render();
   }
 
+  _unbakeBackgroundColor(prevHex) {
+    if (!prevHex || this.contentCanvas.width === 0 || this.contentCanvas.height === 0) return;
+    const { r: tr, g: tg, b: tb } = hexToRgb(prevHex);
+    const imgData = this.contentCtx.getImageData(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      if (a === 255 && r === tr && g === tg && b === tb) {
+        // Make previous background pixels transparent
+        data[i + 3] = 0;
+      }
+    }
+    this.contentCtx.putImageData(imgData, 0, 0);
+  }
+
   saveImage() {
-    this.contentCanvas.toBlob(async (blob) => {
+    // Composite background color behind content for formats without alpha (JPEG)
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = this.contentCanvas.width;
+    outCanvas.height = this.contentCanvas.height;
+    const outCtx = outCanvas.getContext('2d');
+    outCtx.fillStyle = this.backgroundColor || '#000000';
+    outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+    outCtx.drawImage(this.contentCanvas, 0, 0);
+
+    outCanvas.toBlob(async (blob) => {
       try {
         const uuid = this.generateUUID();
         const filename = `${uuid}.jpg`;
@@ -718,8 +1062,9 @@ class DrawingTool {
       dy = 0;
     }
     // Scroll down should move content up (inverse relationship)
-    this.offsetX -= dx * unit;
-    this.offsetY -= dy * unit;
+    const speed = 1.5; // user-preferred pan speed multiplier
+    this.offsetX -= dx * unit * speed;
+    this.offsetY -= dy * unit * speed;
     this.render();
   }
 
@@ -744,7 +1089,15 @@ class DrawingTool {
     ctx.setTransform(this.scale * dpr, 0, 0, this.scale * dpr, this.offsetX * dpr, this.offsetY * dpr);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    // Draw background behind content area
+    ctx.fillStyle = this.backgroundColor || '#000000';
+    ctx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     ctx.drawImage(this.contentCanvas, 0, 0);
+
+    // Draw desktop brush hover preview on top of content (only when not drawing and pointer is in canvas)
+    if (!this.isDrawing && this._isPointerInCanvas) {
+      this._renderBrushPreview(ctx, dpr);
+    }
   }
 
   getActiveBrush() {
@@ -795,6 +1148,64 @@ class DrawingTool {
       const p1 = this._rotatePointAround(x1, y1, cx, cy, angle);
       brush.strokeTo(p0.x, p0.y, p1.x, p1.y);
     }
+  }
+
+  _renderBrushPreview(ctx, dpr) {
+    // Convert last pointer client coords to world space
+    const rect = this.viewportCanvas.getBoundingClientRect();
+    const mx = this._lastPointerClientX - rect.left;
+    const my = this._lastPointerClientY - rect.top;
+    const worldX = (mx - this.offsetX) / this.scale;
+    const worldY = (my - this.offsetY) / this.scale;
+
+    const brush = this.getActiveBrush();
+    const radius = Math.max(1, (brush.getPreviewRadius ? brush.getPreviewRadius() : this.brushRadius));
+
+    ctx.save();
+    ctx.setTransform(this.scale * dpr, 0, 0, this.scale * dpr, this.offsetX * dpr, this.offsetY * dpr);
+    ctx.beginPath();
+    ctx.arc(worldX, worldY, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200,200,200,0.9)';
+    ctx.lineWidth = 0.5 / dpr; // keep approximately 0.5 CSS px
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  getBrushSettings(key) {
+    return this.brushSettings[key] || { size: this.brushRadius, color: this.brushColor };
+  }
+
+  _applyActiveBrushSettingsToUIAndBrush() {
+    const s = this.getBrushSettings(this.activeBrushKey);
+    const colorInput = document.getElementById('brushColorInput');
+    const sizeInput = document.getElementById('brushSizeInput');
+    if (colorInput) colorInput.value = s.color || '#ffffff';
+    if (sizeInput) sizeInput.value = String(s.size || 10);
+    const b = this.getActiveBrush();
+    b.setSize(s.size || 10);
+    if (b.setColor) b.setColor(s.color || '#ffffff');
+    // Update hover preview immediately
+    this.render();
+    // Update focus color dot
+    if (window.brushRing && window.brushRing.updateFocusColor) window.brushRing.updateFocusColor(s.color || '#ffffff');
+  }
+
+  setActiveBrushByKey(key) {
+    this.activeBrushKey = key || this.activeBrushKey;
+    this._applyActiveBrushSettingsToUIAndBrush();
+  }
+
+  resetPointerStates() {
+    this.isDrawing = false;
+    this.isDragging = false;
+    this.isPinching = false;
+    this.isRightMouseSelecting = false;
+    this.isLongPressSelecting = false;
+    this._docMouseMoveHandler && document.removeEventListener('mousemove', this._docMouseMoveHandler);
+    this._docTouchMoveHandler && document.removeEventListener('touchmove', this._docTouchMoveHandler);
+    this._docMouseMoveHandler = null;
+    this._docTouchMoveHandler = null;
   }
 }
 

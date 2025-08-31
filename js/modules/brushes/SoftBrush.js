@@ -6,6 +6,7 @@ export class SoftBrush extends BaseBrush {
     this.stampCanvas = document.createElement('canvas');
     this.cachedColor = null;
     this.cachedSize = 0;
+    this.spacingFactor = 0.32; // smaller = denser stamps, smoother result
   }
   
   rebuildStamp() {
@@ -22,9 +23,11 @@ export class SoftBrush extends BaseBrush {
     
     const bctx = this.stampCanvas.getContext('2d');
     const g = bctx.createRadialGradient(r, r, 0, r, r, r);
-    g.addColorStop(0, `rgba(${cr}, ${cg}, ${cb}, 1)`);
-    g.addColorStop(0.5, `rgba(${cr}, ${cg}, ${cb}, 0.8)`);
-    g.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
+    // Smoother, softer falloff with more stops
+    g.addColorStop(0.0, `rgba(${cr}, ${cg}, ${cb}, 1)`);
+    g.addColorStop(0.25, `rgba(${cr}, ${cg}, ${cb}, 0.65)`);
+    g.addColorStop(0.6, `rgba(${cr}, ${cg}, ${cb}, 0.25)`);
+    g.addColorStop(1.0, `rgba(${cr}, ${cg}, ${cb}, 0)`);
     
     bctx.clearRect(0, 0, r * 2, r * 2);
     bctx.fillStyle = g;
@@ -44,7 +47,8 @@ export class SoftBrush extends BaseBrush {
   strokeTo(x0, y0, x1, y1) {
     this.rebuildStamp();
     const dist = Math.hypot(x1 - x0, y1 - y0);
-    const step = this.size / 2.5;
+    // Denser spacing for smoother strokes; clamp to avoid excessive work
+    const step = Math.max(0.35, this.size * this.spacingFactor);
     
     for (let d = 0; d <= dist; d += step) {
       const t = dist ? d / dist : 0;

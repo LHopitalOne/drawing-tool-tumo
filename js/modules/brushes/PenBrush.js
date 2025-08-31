@@ -16,4 +16,8 @@ export class PenBrush extends BaseBrush {
     ctx.stroke();
     ctx.restore();
   }
+
+  getPreviewRadius() {
+    return this.size; // approximate handle size for preview
+  }
 } 

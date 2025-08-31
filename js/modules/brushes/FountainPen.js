@@ -11,6 +11,8 @@ export class FountainPen extends BaseBrush {
     this.maxRadius = this.size;
     this.speedSensitivity = 0.05; // How much speed affects thickness
     this.smoothing = 0.7; // Smoothing factor for radius changes
+    this.points = []; // Collected points for curve smoothing
+    this.sampleResolution = 0.35; // Smaller = more stamps per pixel, smoother
   }
 
   beginStroke(x, y) {
@@ -18,7 +20,8 @@ export class FountainPen extends BaseBrush {
     this.lastY = y;
     this.lastTime = performance.now();
     this.currentRadius = this.minRadius; // Start with thin stroke
-    
+    this.points = [{ x, y, r: this.currentRadius }];
+
     // Draw initial circle
     this.drawCircle(x, y, this.currentRadius);
   }
@@ -37,13 +40,31 @@ export class FountainPen extends BaseBrush {
     // Smooth radius transitions
     this.currentRadius = this.lerp(this.currentRadius, targetRadius, 1 - this.smoothing);
     
-    // Draw smooth stroke with circles
-    this.drawSmoothStroke(x0, y0, x1, y1, this.currentRadius);
+    // Accumulate points for bezier smoothing
+    const newPoint = { x: x1, y: y1, r: this.currentRadius };
+    this.points.push(newPoint);
+
+    const n = this.points.length;
+    if (n === 2) {
+      // First segment: draw simple interpolated line between first two points
+      this._drawInterpolatedLine(this.points[0], this.points[1]);
+    } else if (n >= 3) {
+      // Draw a quadratic bezier between midpoints using the middle point as control
+      const p0 = this.points[n - 3];
+      const p1 = this.points[n - 2];
+      const p2 = this.points[n - 1];
+      this._drawBezierSegment(p0, p1, p2);
+    }
     
     // Update tracking variables
     this.lastX = x1;
     this.lastY = y1;
     this.lastTime = currentTime;
+  }
+  
+  endStroke() {
+    // Optionally finalize last segment; already handled incrementally
+    this.points = [];
   }
   
   calculateRadiusFromSpeed(speed) {
@@ -74,29 +95,49 @@ export class FountainPen extends BaseBrush {
     return a + (b - a) * t;
   }
   
-  drawSmoothStroke(x0, y0, x1, y1, radius) {
-    const distance = Math.hypot(x1 - x0, y1 - y0);
-    
-    if (distance < 0.5) {
-      // Very short distance, just draw a circle
-      this.drawCircle(x1, y1, radius);
+  _drawInterpolatedLine(p0, p1) {
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.001) {
+      this.drawCircle(p1.x, p1.y, p1.r);
       return;
     }
-    
-    // Calculate step size based on radius for smooth overlapping
-    const step = Math.max(0.5, radius * 0.3);
-    const steps = Math.ceil(distance / step);
-    
+    const avgR = (p0.r + p1.r) * 0.5;
+    const stepLen = Math.max(0.25, avgR * this.sampleResolution);
+    const steps = Math.max(1, Math.ceil(dist / stepLen));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      const x = x0 + (x1 - x0) * t;
-      const y = y0 + (y1 - y0) * t;
-      
-      // Slight radius variation for more organic feel
-      const radiusVariation = 1 + Math.sin(t * Math.PI * 4) * 0.02;
-      const circleRadius = radius * radiusVariation;
-      
-      this.drawCircle(x, y, circleRadius);
+      const x = p0.x + dx * t;
+      const y = p0.y + dy * t;
+      const r = this.lerp(p0.r, p1.r, t);
+      this.drawCircle(x, y, r);
+    }
+  }
+
+  _drawBezierSegment(p0, p1, p2) {
+    // Quadratic bezier from midpoint(p0,p1) to midpoint(p1,p2) using p1 as control
+    const m1x = (p0.x + p1.x) * 0.5;
+    const m1y = (p0.y + p1.y) * 0.5;
+    const m2x = (p1.x + p2.x) * 0.5;
+    const m2y = (p1.y + p2.y) * 0.5;
+
+    const segDist = Math.hypot(m2x - m1x, m2y - m1y);
+    const avgR = (p0.r + p1.r + p2.r) / 3;
+    const stepLen = Math.max(0.25, avgR * this.sampleResolution);
+    const steps = Math.max(1, Math.ceil(segDist / stepLen));
+
+    // Interpolate radius between mid-radii for stable thickness along curve
+    const rStart = (p0.r + p1.r) * 0.5;
+    const rEnd = (p1.r + p2.r) * 0.5;
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const omt = 1 - t;
+      const x = omt * omt * m1x + 2 * omt * t * p1.x + t * t * m2x;
+      const y = omt * omt * m1y + 2 * omt * t * p1.y + t * t * m2y;
+      const r = this.lerp(rStart, rEnd, t);
+      this.drawCircle(x, y, r);
     }
   }
   

@@ -7,7 +7,12 @@ import {
   PencilBrush,
   EraserBrush
 } from './brushes/index.js';
-import { generateUUID as createUUID, hexToRgb } from './utils.js';
+import { hexToRgb } from './utils.js';
+import * as storage from './services/storage.js';
+import { RadialController } from './controllers/radialController.js';
+import { ViewportController } from './controllers/viewportController.js';
+import * as symmetry from './math/symmetry.js';
+import { renderBrushPreview } from './render/preview.js';
 
 class DrawingTool {
   constructor() {
@@ -49,18 +54,11 @@ class DrawingTool {
       eraser: { size: this.brushRadius, color: this.brushColor },
     };
 
-    // View transform (screen = world * scale + offset)
-    this.scale = 1;
-    this.fitScale = 1; // scale that fits content into viewport
-    this.offsetX = 0;
-    this.offsetY = 0;
+    // Viewport controller (pan/zoom/fit)
+    this.viewport = new ViewportController(this.viewportCanvas);
 
     // Dragging state
     this.isSpacePressed = false;
-    this.dragStartX = 0;
-    this.dragStartY = 0;
-    this.dragStartOffsetX = 0;
-    this.dragStartOffsetY = 0;
 
     // Pinch zoom state
     this.isPinching = false;
@@ -75,15 +73,9 @@ class DrawingTool {
     this.touchStartY = 0;
     this.isTouchGesture = false;
 
-    // Radial (settings) selection state
-    this.isRadialOpen = false;
-    this.isRightMouseSelecting = false;
-    this.currentRadialHoverEl = null;
+    // Radial (settings) controller
+    this.radial = new RadialController();
     this.longPressTimeoutId = null;
-    this.isLongPressSelecting = false;
-    this._docMouseMoveHandler = null;
-    this._docTouchMoveHandler = null;
-    this._docMouseUpHandler = null;
 
     // Desktop hover preview state
     this._isPointerInCanvas = false;
@@ -177,8 +169,8 @@ class DrawingTool {
     this._contentHasBakedBackground = false;
 
     // Prepare viewport and fit content
-    this.resizeViewportCanvas();
-    this.fitContentToViewport();
+    this.viewport.resizeBackingStore();
+    this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
   }
 
@@ -192,8 +184,8 @@ class DrawingTool {
     this.contentCtx.lineJoin = 'round';
     this.initializeBrushes();
 
-    this.resizeViewportCanvas();
-    this.fitContentToViewport();
+    this.viewport.resizeBackingStore();
+    this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
   }
 
@@ -257,7 +249,7 @@ class DrawingTool {
     this.viewportCanvas.addEventListener('mousemove', (e) => {
       this._lastPointerClientX = e.clientX;
       this._lastPointerClientY = e.clientY;
-      if (!this.isDrawing && !this.isRadialOpen) this.render();
+      if (!this.isDrawing && !this.radial.isOpen()) this.render();
     });
 
     // Listen to size changes from radial focus UI
@@ -394,7 +386,7 @@ class DrawingTool {
     }
     if (fitBtn) {
       fitBtn.addEventListener('click', () => {
-        this.fitContentToViewport();
+        this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
         this.render();
       });
     }
@@ -417,74 +409,15 @@ class DrawingTool {
   }
 
   getMousePos(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    // Convert screen (CSS px) to world/content coordinates using inverse transform
-    return {
-      x: (mx - this.offsetX) / this.scale,
-      y: (my - this.offsetY) / this.scale
-    };
+    return this.viewport.worldFromClient(e.clientX, e.clientY);
   }
 
   getTouchPos(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const mx = touch.clientX - rect.left;
-    const my = touch.clientY - rect.top;
-    return {
-      x: (mx - this.offsetX) / this.scale,
-      y: (my - this.offsetY) / this.scale
-    };
+    const t = e.touches[0];
+    return this.viewport.worldFromClient(t.clientX, t.clientY);
   }
 
-  // Compute midpoint of two touches in screen space (CSS px)
-  _getTouchesMidpoint(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const t0 = e.touches[0];
-    const t1 = e.touches[1];
-    const mx = ((t0.clientX + t1.clientX) / 2) - rect.left;
-    const my = ((t0.clientY + t1.clientY) / 2) - rect.top;
-    return { mx, my };
-  }
-
-  // Distance between first two touches in screen space (CSS px)
-  _getTouchesDistance(e) {
-    const t0 = e.touches[0];
-    const t1 = e.touches[1];
-    const dx = t1.clientX - t0.clientX;
-    const dy = t1.clientY - t0.clientY;
-    return Math.hypot(dx, dy);
-  }
-
-  _beginPinch(e) {
-    if (!e.touches || e.touches.length < 2) return;
-    this.isPinching = true;
-    this.pinchStartDistance = this._getTouchesDistance(e);
-    this.pinchStartScale = this.scale;
-    const { mx, my } = this._getTouchesMidpoint(e);
-    // Store the world coords under the midpoint to keep it stable while zooming
-    this.pinchWorldMidX = (mx - this.offsetX) / this.scale;
-    this.pinchWorldMidY = (my - this.offsetY) / this.scale;
-  }
-
-  _updatePinch(e) {
-    if (!this.isPinching || !e.touches || e.touches.length < 2) return;
-    const currentDistance = this._getTouchesDistance(e);
-    if (this.pinchStartDistance <= 0) return;
-    const factor = currentDistance / this.pinchStartDistance;
-    // Clamp scale
-    const minScale = Math.max(this.fitScale * 0.25, 0.05);
-    const maxScale = 32;
-    const newScale = Math.min(maxScale, Math.max(minScale, this.pinchStartScale * factor));
-
-    // Adjust offset so the world point under pinch midpoint remains stationary
-    const { mx, my } = this._getTouchesMidpoint(e);
-    this.scale = newScale;
-    this.offsetX = mx - this.pinchWorldMidX * this.scale;
-    this.offsetY = my - this.pinchWorldMidY * this.scale;
-    this.render();
-  }
+  // Pinch/zoom handled by ViewportController
 
   startDrawing(e) {
     // Block drawing while focus mode is active; close focus instead
@@ -503,16 +436,7 @@ class DrawingTool {
     }
     // Right-click opens radial selection and suspends drawing
     if (e && e.button === 2) {
-      this._openRadialAt(e.clientX, e.clientY);
-      this.isRightMouseSelecting = true;
-      // Track mouseup anywhere to finalize selection
-      this._docMouseUpHandler = (ev) => {
-        const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-        if (!focusActive) {
-          this._finalizeRadialSelection(ev);
-        }
-      };
-      document.addEventListener('mouseup', this._docMouseUpHandler, { once: true });
+      this.radial.openAt(e.clientX, e.clientY, { via: 'mouse' });
       return;
     }
     if (this.isSpacePressed) {
@@ -541,11 +465,11 @@ class DrawingTool {
       return;
     }
     // While radial is open, update hover selection and skip drawing
-    if (this.isRadialOpen) {
+    if (this.radial.isOpen()) {
       const clientX = e.clientX;
       const clientY = e.clientY;
       if (typeof clientX === 'number' && typeof clientY === 'number') {
-        this._updateRadialHover(clientX, clientY);
+        this.radial.updateHover(clientX, clientY);
       }
       return;
     }
@@ -616,9 +540,9 @@ class DrawingTool {
       this.longPressTimeoutId = setTimeout(() => {
         // If still single touch and not dragging/pinching, open radial
         if (!this.isDragging && !this.isPinching) {
-          this._openRadialAt(startClientX, startClientY);
-          this.isLongPressSelecting = true;
-          this._updateRadialHover(startClientX, startClientY);
+          this.radial.openAt(startClientX, startClientY, { via: 'touch' });
+          this.radial.setLongPressSelecting(true);
+          this.radial.updateHover(startClientX, startClientY);
         }
       }, 400);
     } else if (e.type === 'touchmove') {
@@ -639,12 +563,12 @@ class DrawingTool {
         return;
       }
       const touch = e.touches[0];
-      if (this.isRadialOpen && this.isLongPressSelecting && touch) {
-        this._updateRadialHover(touch.clientX, touch.clientY);
+      if (this.radial.isOpen() && this.radial.isLongPressSelecting() && touch) {
+        this.radial.updateHover(touch.clientX, touch.clientY);
         return;
       }
       // If long-press hasn't triggered yet, start drawing on movement and cancel timer
-      if (!this.isDrawing && !this.isRadialOpen) {
+      if (!this.isDrawing && !this.radial.isOpen()) {
         if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
         this.isDrawing = true;
         this.lastX = pos.x;
@@ -671,10 +595,10 @@ class DrawingTool {
       this.dragStartX = 0;
       this.dragStartY = 0;
       if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
-      if (this.isRadialOpen && this.isLongPressSelecting) {
+      if (this.radial.isOpen() && this.radial.isLongPressSelecting()) {
         const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
         if (!focusActive) {
-          this._finalizeRadialSelection();
+          this.radial.finalizeSelection();
         }
         return;
       }
@@ -683,11 +607,11 @@ class DrawingTool {
 
   stopDrawing(e) {
     // If radial menu is open, only finalize on release, ignore mouseout
-    if (this.isRadialOpen) {
+    if (this.radial.isOpen()) {
       const type = e && e.type;
       const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
       if (!focusActive && (type === 'mouseup' || type === 'touchend' || type === 'touchcancel')) {
-        this._finalizeRadialSelection(e);
+        this.radial.finalizeSelection(e);
       }
       return;
     }
@@ -704,112 +628,7 @@ class DrawingTool {
     if (brush.endStroke) brush.endStroke();
   }
 
-  // --- Radial settings helpers ---
-  _openRadialAt(clientX, clientY) {
-    const settingsPanel = document.getElementById('settingsPanel');
-    if (!settingsPanel) return;
-    settingsPanel.style.left = `${clientX}px`;
-    settingsPanel.style.top = `${clientY}px`;
-    settingsPanel.removeAttribute('hidden');
-    this.isRadialOpen = true;
-
-    // Sync visuals with current active selection when opening
-    if (window.brushRing && window.brushRing.setButtonVisuals) {
-      window.brushRing.setButtonVisuals(this.activeBrushKey, null);
-    }
-
-    // Track cursor/finger globally while open
-    this._docMouseMoveHandler = (ev) => {
-      if (!this.isRadialOpen) return;
-      this._updateRadialHover(ev.clientX, ev.clientY);
-    };
-    document.addEventListener('mousemove', this._docMouseMoveHandler);
-
-    this._docTouchMoveHandler = (ev) => {
-      if (!this.isRadialOpen) return;
-      if (ev.touches && ev.touches[0]) {
-        this._updateRadialHover(ev.touches[0].clientX, ev.touches[0].clientY);
-      }
-    };
-    document.addEventListener('touchmove', this._docTouchMoveHandler, { passive: false });
-  }
-
-  _closeRadial() {
-    const settingsPanel = document.getElementById('settingsPanel');
-    if (!settingsPanel) return;
-    settingsPanel.setAttribute('hidden', '');
-    this.isRadialOpen = false;
-    this.isRightMouseSelecting = false;
-    this.isLongPressSelecting = false;
-    this.currentRadialHoverEl = null;
-    if (this._docMouseMoveHandler) {
-      document.removeEventListener('mousemove', this._docMouseMoveHandler);
-      this._docMouseMoveHandler = null;
-    }
-    if (this._docTouchMoveHandler) {
-      document.removeEventListener('touchmove', this._docTouchMoveHandler);
-      this._docTouchMoveHandler = null;
-    }
-  }
-
-  _updateRadialHover(clientX, clientY) {
-    const brushGroupEl = document.querySelector('.brush-group');
-    if (!brushGroupEl) return;
-    
-    const btn = this._hitTestRadialButton(clientX, clientY);
-    
-    // If we're no longer hovering over any button, clear the current hover
-    if (!btn) {
-      if (this.currentRadialHoverEl) {
-        this.currentRadialHoverEl = null;
-        if (window.brushRing && window.brushRing.setButtonVisuals) {
-          window.brushRing.setButtonVisuals(this.activeBrushKey, null);
-        }
-      }
-      return;
-    }
-    
-    // If we're hovering over a different button, update the hover
-    if (this.currentRadialHoverEl !== btn) {
-      this.currentRadialHoverEl = btn;
-      if (window.brushRing && window.brushRing.setButtonVisuals) {
-        window.brushRing.setButtonVisuals(this.activeBrushKey, btn);
-      }
-    }
-  }
-
-  _finalizeRadialSelection(e) {
-    const brushGroupEl = document.querySelector('.brush-group');
-    if (!brushGroupEl) { this._closeRadial(); return; }
-    // If we have a hovered element, pick it; else try element under pointer
-    let targetBtn = this.currentRadialHoverEl;
-    if (!targetBtn && e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
-      targetBtn = this._hitTestRadialButton(e.clientX, e.clientY);
-      if (targetBtn && !brushGroupEl.contains(targetBtn)) targetBtn = null;
-    }
-    if (targetBtn) {
-      this.activeBrushKey = targetBtn.getAttribute('data-brush') || 'soft';
-      this._applyActiveBrushSettingsToUIAndBrush();
-      if (window.brushRing && window.brushRing.setButtonVisuals) {
-        window.brushRing.setButtonVisuals(this.activeBrushKey);
-      }
-    }
-    this._closeRadial();
-  }
-
-  _hitTestRadialButton(clientX, clientY) {
-    const group = document.querySelector('.brush-group');
-    if (!group) return null;
-    const buttons = Array.from(group.querySelectorAll('.brush-btn'));
-    for (let i = 0; i < buttons.length; i++) {
-      const btn = buttons[i];
-      const rect = btn.getBoundingClientRect();
-      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-        return btn;
-      }
-    }
-    return null;
-  }
+  // --- Radial settings helpers moved to controllers/RadialController ---
 
   clearCanvas() {
     // Clear drawing content to transparent; background is drawn during render
@@ -860,7 +679,7 @@ class DrawingTool {
   }
 
   saveImage() {
-    // Composite background color behind content for formats without alpha (JPEG)
+    // Composite background behind content for formats without alpha (JPEG)
     const outCanvas = document.createElement('canvas');
     outCanvas.width = this.contentCanvas.width;
     outCanvas.height = this.contentCanvas.height;
@@ -869,77 +688,35 @@ class DrawingTool {
     outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
     outCtx.drawImage(this.contentCanvas, 0, 0);
 
-    outCanvas.toBlob(async (blob) => {
+    (async () => {
       try {
-        const uuid = this.generateUUID();
-        const filename = `${uuid}.jpg`;
-        const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
-        const uploadUrl = supabaseUrl + filename;
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
-          },
-          body: formData
-        });
-        if (response.ok) {
-          const publicUrl = `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-          window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
-        } else {
-          throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
-        }
+        const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
+        const filename = storage.createFilename('jpg');
+        const publicUrl = await storage.uploadBlobToSupabase(blob, filename);
+        window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
       } catch (error) {
         console.error('Վայ չստացվեց...:', error);
         window.alert(`Վայ չստացվեց...: ${error.message}\n\n Փոխարենը՝ նկարդ քո համակարգչին ներբեռնեցի`);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const fallbackFilename = `drawing-${timestamp}.jpg`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fallbackFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        try {
+          const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const fallbackFilename = `drawing-${timestamp}.jpg`;
+          const url = storage.fileOrBlobToObjectUrl(blob);
+          storage.fileOrBlobDownload(url, fallbackFilename);
+          storage.revokeObjectUrl(url);
+        } catch (_) {}
       }
-    }, 'image/jpeg', 0.95);
+    })();
   }
 
   async handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const uuid = this.generateUUID();
-      const filename = `${uuid}.jpg`;
-      const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
-      const uploadUrl = supabaseUrl + filename;
-      let uploadBlob = file;
-      if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
-        const img = await this.fileToImage(file);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        uploadBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
-      }
-      const formData = new FormData();
-      formData.append('file', uploadBlob, filename);
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
-        },
-        body: formData
-      });
-      if (response.ok) {
-        const publicUrl = this.generatePublicLink(filename);
-        window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
-      } else {
-        throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
-      }
+      const filename = storage.createFilename('jpg');
+      const jpegBlob = await storage.ensureJpegBlob(file);
+      const publicUrl = await storage.uploadBlobToSupabase(jpegBlob, filename);
+      window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
     } catch (error) {
       console.error('Վայ չստացվեց...:', error);
       window.alert(`Վայ չստացվեց...: ${error.message}`);
@@ -948,123 +725,14 @@ class DrawingTool {
     }
   }
 
-  fileToImage(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = function (event) {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = event.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  generateUUID() {
-    return createUUID();
-  }
-
-  generatePublicLink(filename) {
-    return `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-  }
-
-  // --- Viewport helpers ---
-  resizeViewportCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    // Set canvas internal resolution to match CSS size * DPR for crisp rendering
-    this.viewportCanvas.width = Math.max(1, Math.round(rect.width * dpr));
-    this.viewportCanvas.height = Math.max(1, Math.round(rect.height * dpr));
-  }
-
-  fitContentToViewport() {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const vw = rect.width;
-    const vh = rect.height;
-    const cw = this.contentCanvas.width;
-    const ch = this.contentCanvas.height;
-    if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return;
-    this.fitScale = Math.min(vw / cw, vh / ch);
-    this.scale = this.fitScale;
-    this.offsetX = (vw - cw * this.scale) / 2;
-    this.offsetY = (vh - ch * this.scale) / 2;
-  }
-
-  
 
   handleResize() {
-    const prevRect = this.viewportCanvas.getBoundingClientRect();
-    const prevCenterScreen = { x: prevRect.width / 2, y: prevRect.height / 2 };
-    const prevCenterWorld = {
-      x: (prevCenterScreen.x - this.offsetX) / this.scale,
-      y: (prevCenterScreen.y - this.offsetY) / this.scale,
-    };
-    const prevScale = this.scale;
-    const prevFit = this.fitScale;
-
-    // Resize viewport backing store
-    this.resizeViewportCanvas();
-
-    // Recompute fit scale for the new viewport size
-    this.fitContentToViewport();
-
-    // Decide new scale: if user had custom zoom, keep it; otherwise stick to fit
-    const userHadCustomZoom = Math.abs(prevScale - prevFit) > 1e-6;
-    this.scale = userHadCustomZoom ? prevScale : this.fitScale;
-
-    // Recenter so previous world center stays under screen center
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    this.offsetX = rect.width / 2 - prevCenterWorld.x * this.scale;
-    this.offsetY = rect.height / 2 - prevCenterWorld.y * this.scale;
-
+    this.viewport.onResize(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
   }
 
   handleWheel(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    // Desktop pinch-to-zoom (ctrlKey=true)
-    if (e.ctrlKey) {
-      e.preventDefault();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const worldXBefore = (mouseX - this.offsetX) / this.scale;
-      const worldYBefore = (mouseY - this.offsetY) / this.scale;
-
-      // Zoom factor: smooth exponential zoom
-      const zoomIntensity = 0.005 ; // smaller = slower zoom
-      const factor = Math.exp(-e.deltaY * zoomIntensity);
-
-      // Clamp scale
-      const minScale = Math.max(this.fitScale * 0.25, 0.05);
-      const maxScale = 32;
-      const newScale = Math.min(maxScale, Math.max(minScale, this.scale * factor));
-      this.scale = newScale;
-
-      // Keep world point under cursor fixed
-      this.offsetX = mouseX - worldXBefore * this.scale;
-      this.offsetY = mouseY - worldYBefore * this.scale;
-
-      this.render();
-      return;
-    }
-
-    // Otherwise: pan the canvas with wheel deltas (vertical and horizontal)
-    e.preventDefault();
-    const unit = e.deltaMode === 1 ? 32 : (e.deltaMode === 2 ? rect.height : 1);
-    let dx = e.deltaX;
-    let dy = e.deltaY;
-    // Many mice emit horizontal pan as Shift+vertical; map that when deltaX is 0
-    if (e.shiftKey && Math.abs(dx) < 1 && Math.abs(dy) >= 1) {
-      dx = dy;
-      dy = 0;
-    }
-    // Scroll down should move content up (inverse relationship)
-    const speed = 1.5; // user-preferred pan speed multiplier
-    this.offsetX -= dx * unit * speed;
-    this.offsetY -= dy * unit * speed;
+    this.viewport.wheel(e);
     this.render();
   }
 
@@ -1086,7 +754,7 @@ class DrawingTool {
     ctx.clearRect(0, 0, this.viewportCanvas.width, this.viewportCanvas.height);
 
     // Apply composite transform (DPR first, then world transform)
-    ctx.setTransform(this.scale * dpr, 0, 0, this.scale * dpr, this.offsetX * dpr, this.offsetY * dpr);
+    ctx.setTransform(this.viewport.scale * dpr, 0, 0, this.viewport.scale * dpr, this.viewport.offsetX * dpr, this.viewport.offsetY * dpr);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     // Draw background behind content area
@@ -1104,72 +772,35 @@ class DrawingTool {
     return this.brushes[this.activeBrushKey] || this.brushes.soft;
   }
 
-  // --- Symmetry helpers ---
-  _getCanvasCenter() {
-    return { x: this.contentCanvas.width / 2, y: this.contentCanvas.height / 2 };
-  }
-
-  _rotatePointAround(x, y, cx, cy, angleRad) {
-    const cosA = Math.cos(angleRad);
-    const sinA = Math.sin(angleRad);
-    const dx = x - cx;
-    const dy = y - cy;
-    return { x: cx + dx * cosA - dy * sinA, y: cy + dx * sinA + dy * cosA };
-  }
-
+  // --- Symmetry helpers (delegated)
   _symmetryBeginAndDot(x, y) {
     const brush = this.getActiveBrush();
     const axes = this.symmetryAxes | 0;
-    if (!axes) {
-      brush.beginStroke(x, y);
-      brush.strokeTo(x, y, x, y);
-      return;
-    }
-    const { x: cx, y: cy } = this._getCanvasCenter();
-    for (let i = 0; i < axes; i++) {
-      const angle = (i * Math.PI * 2) / axes;
-      const p = this._rotatePointAround(x, y, cx, cy, angle);
-      brush.beginStroke(p.x, p.y);
-      brush.strokeTo(p.x, p.y, p.x, p.y);
-    }
+    const { x: cx, y: cy } = symmetry.getCanvasCenter(this.contentCanvas);
+    symmetry.beginAndDot(brush, x, y, axes, cx, cy);
   }
 
   _symmetryStroke(x0, y0, x1, y1) {
     const brush = this.getActiveBrush();
     const axes = this.symmetryAxes | 0;
-    if (!axes) {
-      brush.strokeTo(x0, y0, x1, y1);
-      return;
-    }
-    const { x: cx, y: cy } = this._getCanvasCenter();
-    for (let i = 0; i < axes; i++) {
-      const angle = (i * Math.PI * 2) / axes;
-      const p0 = this._rotatePointAround(x0, y0, cx, cy, angle);
-      const p1 = this._rotatePointAround(x1, y1, cx, cy, angle);
-      brush.strokeTo(p0.x, p0.y, p1.x, p1.y);
-    }
+    const { x: cx, y: cy } = symmetry.getCanvasCenter(this.contentCanvas);
+    symmetry.stroke(brush, x0, y0, x1, y1, axes, cx, cy);
   }
 
   _renderBrushPreview(ctx, dpr) {
-    // Convert last pointer client coords to world space
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const mx = this._lastPointerClientX - rect.left;
-    const my = this._lastPointerClientY - rect.top;
-    const worldX = (mx - this.offsetX) / this.scale;
-    const worldY = (my - this.offsetY) / this.scale;
-
     const brush = this.getActiveBrush();
     const radius = Math.max(1, (brush.getPreviewRadius ? brush.getPreviewRadius() : this.brushRadius));
-
-    ctx.save();
-    ctx.setTransform(this.scale * dpr, 0, 0, this.scale * dpr, this.offsetX * dpr, this.offsetY * dpr);
-    ctx.beginPath();
-    ctx.arc(worldX, worldY, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(200,200,200,0.9)';
-    ctx.lineWidth = 0.5 / dpr; // keep approximately 0.5 CSS px
-    ctx.fillStyle = 'rgba(0,0,0,0)';
-    ctx.stroke();
-    ctx.restore();
+    renderBrushPreview(
+      ctx,
+      dpr,
+      this.viewportCanvas,
+      this.viewport.scale,
+      this.viewport.offsetX,
+      this.viewport.offsetY,
+      this._lastPointerClientX,
+      this._lastPointerClientY,
+      radius,
+    );
   }
 
   getBrushSettings(key) {
@@ -1200,17 +831,7 @@ class DrawingTool {
     this.isDrawing = false;
     this.isDragging = false;
     this.isPinching = false;
-    this.isRightMouseSelecting = false;
-    this.isLongPressSelecting = false;
-    this._docMouseMoveHandler && document.removeEventListener('mousemove', this._docMouseMoveHandler);
-    this._docTouchMoveHandler && document.removeEventListener('touchmove', this._docTouchMoveHandler);
-    this._docMouseMoveHandler = null;
-    this._docTouchMoveHandler = null;
   }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  new DrawingTool();
-});
 
 export default DrawingTool;

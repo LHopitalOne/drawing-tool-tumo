@@ -1,5 +1,7 @@
-import './modules/drawingTool.js';
+import './modules/ui/brushUI.js';
+import App from './modules/App.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // drawingTool.js registers itself by instantiating the class on DOMContentLoaded
+  const app = new App();
+  app.init();
 });

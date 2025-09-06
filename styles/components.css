@@ -17,6 +17,8 @@
 
 .control-button svg {
   display: block;
+  width: 24px;
+  height: 24px;
 }
 
 .control-button {
@@ -24,44 +26,51 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 120px;
+  width: 60px;
+  height: 60px;
+  backdrop-filter: blur(3px) brightness(1.1);
+  border: 0.5px solid rgba(225, 225, 225, 0.33);
+  box-shadow: -8px -10px 46px rgba(0, 0, 0, 0.37);
 }
 
 .control-button#clearBtn {
-  background: #ff6b6b;
+  background: rgba(108, 108, 108, 0.33);
   color: white;
 }
 
 .control-button#clearBtn:hover {
-  background: #ff5252;
+  background: rgba(108, 108, 108, 0.5);
   transform: translateY(-2px);
+  box-shadow: -12px -14px 56px rgba(0, 0, 0, 0.45);
 }
 
 .control-button#saveBtn {
-  background: #4ecdc4;
+  background: rgba(108, 108, 108, 0.33);
   color: white;
 }
 
 .control-button#saveBtn:hover {
-  background: #21b5b3;
+  background: rgba(108, 108, 108, 0.5);
   transform: translateY(-2px);
+  box-shadow: -12px -14px 56px rgba(0, 0, 0, 0.45);
 }
 
 .control-button#uploadBtn {
-  background: white;
-  color: rgb(33, 33, 33);
+  background: rgba(108, 108, 108, 0.33);
+  color: white;
 }
 
 .control-button#uploadBtn:hover {
-  background: rgb(245, 245, 245);
+  background: rgba(108, 108, 108, 0.5);
   transform: translateY(-2px);
+  box-shadow: -12px -14px 56px rgba(0, 0, 0, 0.45);
 }
 
 .info {
@@ -79,13 +88,21 @@
   position: fixed;
   right: 24px;
   bottom: 24px;
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+  background: #e1e1e1;
   color: white;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  /* Add a white surrounding backdrop */
+  box-shadow:
+    0 0 0 9px #e1e1e1a0,
+    /* white surrounding 1st backdrop */
+    0 0 0 5px #e1e1e1c1,
+    /* white surrounding 2nd backdrop */
+    0 10px 20px rgba(0, 0, 0, 0.2);
+  /* original shadow */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -94,7 +111,7 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.fab:hover {
+.fab:active {
   transform: translateY(-2px);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
 }
@@ -102,87 +119,650 @@
 /* Settings Panel */
 .settings-panel {
   position: fixed;
-  right: 24px;
-  bottom: 92px;
-  width: 280px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  height: 20vh;
+  aspect-ratio: 1;
   max-width: calc(100vw - 48px);
-  background: white;
-  border-radius: 14px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  padding: 16px;
-  z-index: 1100;
+  z-index: 1200;
+  /* Animations for quick in/out */
+  will-change: transform, opacity, filter;
+  transition: opacity 0.14s ease-out, filter 0.14s ease-out, transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.settings-header {
+.settings-panel .settings-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.settings-panel .brush-group {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* margin: 0 auto 16px auto;
+  display: block; */
+}
+
+/* --- Radial open/close animations --- */
+/* Initial entering state: slightly scaled down, blurred and transparent */
+.settings-panel.radial-enter {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
+/* Open state: fully visible and crisp; also emits a quick ripple */
+.settings-panel.radial-open {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Exit state: fade + blur + slight shrink */
+.settings-panel.radial-exit {
+  opacity: 0;
+  filter: blur(10px);
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+/* Ripple burst from the center */
+.settings-panel::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 40%, rgba(255,255,255,0.0) 70%);
+  filter: blur(10px);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@keyframes radialRippleIn {
+  0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0.5; filter: blur(16px); }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0;   filter: blur(20px); }
+}
+
+@keyframes radialRippleOut {
+  0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.35; filter: blur(14px); }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0;    filter: blur(20px); }
+}
+
+.settings-panel.radial-open::after {
+  animation: radialRippleIn 0.18s ease-out both;
+}
+
+.settings-panel.radial-exit::after {
+  animation: radialRippleOut 0.16s ease-out both;
+}
+
+.settings-panel .brush-group .brush-btn {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  border: none;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px;
+  transition: transform 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), opacity 0.12s ease, filter 0.12s ease;
+  transform-origin: center;
+
+  /* Position around center using custom properties */
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1));
+
+  z-index: 1000;
+}
+
+/* During enter/exit, pull buttons back to center with blur and fade */
+.settings-panel.radial-enter .brush-group .brush-btn,
+.settings-panel.radial-exit .brush-group .brush-btn {
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(0px) rotate(calc(var(--angle) * -1)) scale(0.9);
+  filter: blur(6px);
+  opacity: 0;
+}
+
+.settings-panel .brush-group .brush-btn:hover {
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1)) scale(1.2);
+}
+
+.settings-panel .brush-group .brush-btn embed {
+  display: block;
+  width: 60%;
+  height: 60%;
+  pointer-events: none;
+}
+
+/* Disable hover scale while no-hover state active (during initial open) */
+.settings-panel.no-hover .brush-group .brush-btn:hover {
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1));
+}
+
+.settings-panel .brush-group .brush-btn[data-brush="soft"] embed,
+.settings-panel .brush-group .brush-btn[data-brush="pen"] embed,
+.settings-panel .brush-group .brush-btn[data-brush="pencil"] embed,
+.settings-panel .brush-group .brush-btn[data-brush="fountain"] embed {
+  transform: rotate(232deg);
+}
+
+.settings-panel .brush-group .brush-btn[data-brush="air"] embed {
+  transform: rotate(-32deg) translate(0px, -2px);
+}
+
+.settings-bar {
+  position: fixed;
+  top: 25px;
+
+  width: 50vw;
+  padding: 0px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #ffffff;
+  border-radius: 50px;
+  box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px;
+
+  pointer-events: auto;
+  z-index: 1500;
+
+  transform-origin: center center;
+  will-change: transform;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.settings-bar:hover {
+  transform: translateY(-3px);
+  box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 30px;
+}
+
+/* Entrance animation states for the top settings bar */
+.settings-bar.settings-enter {
+  transform: scaleX(0.5);
+}
+
+.settings-bar.content-hidden .settings-bar-content {
+  opacity: 0;
+  filter: blur(10px);
+}
+
+.left-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 10px;
+}
+
+.settings-bar .settings-bar-content {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  will-change: opacity, filter;
+  transition: opacity 0.16s ease-out, filter 0.16s ease-out;
+}
+
+.toolbar-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+}
+
+.toolbar-left {
+  justify-content: flex-start;
+}
+
+.right-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 10px;
+  justify-content: flex-end;
+}
+
+.chip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 10px;
+  border: 0.5px solid rgba(128, 128, 128, 0.6);
+  border-radius: 999px;
+  background: #f7f7f7;
+  color: #222;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.chip-button:hover {
+  background: #ededed;
+}
+
+.chip-button:active {
+  transform: translateY(1px);
+}
+
+.chip-button svg {
+  display: block;
+  height: 100%;
+}
+
+/* Secondary buttons are revealed below primary, and remain visible when hovering container or themselves */
+.hover-reveal {
+  position: relative;
+}
+
+.chip-button.secondary {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  z-index: 10;
+  /* above siblings */
+  transform: translate(-50%, 0) scaleY(0.85);
+  transform-origin: top center;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.15s ease;
+  /* Fuse with primary */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top-width: 0;
+  /* margin-top: -1px; */
+}
+
+.hover-reveal {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Show only when long-press reveals */
+.hover-reveal.reveal .secondary {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 8px) scaleY(1);
+}
+
+.hover-reveal.closing .secondary {
+  /* Animate out symmetrically; keep visible until transition ends */
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0) scaleY(0.85);
+}
+
+.hover-reveal.reveal {
+  pointer-events: auto;
+}
+
+/* Make primary look fused when revealed */
+.hover-reveal.reveal .chip-button:not(.secondary) {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.chip-circle {
+  width: 22px;
+  height: 22px;
+
+  position: relative;
+  cursor: pointer;
+
+  --ring-width: 2px;
+  border: 0;
+  border-radius: 50%;
+}
+
+.chip-circle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+      #ff0000,
+      #ff7f00,
+      #ffff00,
+      #00ff00,
+      #00ffff,
+      #0000ff,
+      #8b00ff,
+      #ff0000);
+  /* Make a donut (ring) by masking the center */
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
+  mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
+  pointer-events: none;
+}
+
+/* Make left group toolbar buttons match the canvas selector size and be circular */
+.left-group .chip-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.left-group .chip-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Keep circular shape when revealing secondary button */
+.left-group .chip-button.secondary {
+  border-radius: 50%;
+  border-top-width: 0.5px;
+}
+
+.left-group .hover-reveal.reveal .chip-button:not(.secondary) {
+  border-bottom-left-radius: 50%;
+  border-bottom-right-radius: 50%;
+}
+
+.size-control input[type="number"],
+.symmetry-control input[type="number"] {
+  height: 28px;
+  width: 56px;
+  padding: 0 8px;
+
+  border-radius: 8px;
+
+  background: #fafafa;
+  color: #222;
+  border: 0.5px solid rgba(128, 128, 128, 0.6);
+
+  cursor: ew-resize;
+}
+
+.size-control input[type="number"]:focus,
+.symmetry-control input[type="number"]:focus {
+  outline: none;
+}
+
+.size-control input[type="number"]::-webkit-outer-spin-button,
+.size-control input[type="number"]::-webkit-inner-spin-button,
+.symmetry-control input[type="number"]::-webkit-outer-spin-button,
+.symmetry-control input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* Color Picker */
+.color-picker {
+  width: 500px;
+  position: fixed;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.37);
+  backdrop-filter: blur(10px);
+  border-radius: 30px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  padding: 12px;
+  z-index: 1600;
+  display: flex;
+  flex-direction: column;
+  will-change: opacity, transform, filter;
+  transition: opacity 0.16s ease-out, filter 0.16s ease-out, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.color-picker.cp-desktop {
+  width: fit-content;
+  height: fit-content;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.color-picker.cp-mobile {
+  width: 94vw;
+  height: 82vh;
+  left: 3vw !important;
+  top: 9vh !important;
+  border-radius: 22px;
+}
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1599;
+  will-change: opacity;
+  transition: opacity 0.16s ease-out;
+}
+
+/* Color picker enter/exit states */
+.color-picker.cp-enter {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(12px) scale(0.98);
+}
+.color-picker.cp-open {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0) scale(1);
+}
+.color-picker.cp-exit {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(10px) scale(0.98);
+  pointer-events: none;
+}
+
+.cp-overlay.cp-enter { opacity: 0; }
+.cp-overlay.cp-open { opacity: 1; }
+.cp-overlay.cp-exit { opacity: 0; pointer-events: none; }
+
+.color-picker .cp-header {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.settings-header h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #333;
-}
-
-.settings-close {
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  color: #666;
-}
-
-.settings-body .form-group + .form-group {
-  margin-top: 12px;
-}
-
-.settings-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: #666;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.brush-group {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 4px 6px;
 }
 
-.brush-btn {
-  height: 36px;
-  border: none;
-  border-radius: 10px;
-  background: #f0f0f0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #333;
+.cp-desktop .cp-header {
+  cursor: grab;
+}
+
+.cp-desktop .cp-header.dragging {
+  cursor: grabbing;
+}
+
+.color-picker .cp-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.1s ease;
+  font-weight: 300;
+  z-index: 10;
 }
 
-.brush-btn:hover { background: #e8e8e8; }
-.brush-btn:active { transform: translateY(1px); }
-.brush-btn.selected { background: #dfe3ff; color: #3b49df; }
+.color-picker .cp-close:active {
+  background: rgba(0, 0, 0, 0.12);
+}
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: #f0f0f0;
-  color: #333;
+.color-picker .cp-inner {
+  display: grid;
+  grid-template-rows: auto auto; /* shrink-wrap both rows */
+  gap: 8px;
+  align-items: start;
+}
+
+.color-picker .cp-top {
+  aspect-ratio: 1 / 1;
+  width: clamp(260px, 42vw, 560px);
+  transform: translateY(-20px);
+}
+
+.color-picker .cp-field {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.color-picker .cp-dot {
+  position: absolute;
+  border-radius: 50%;
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: transform 0.6s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.color-picker .cp-dot {
+  transition: width 0.1s cubic-bezier(0, 0, 0.2, 1), height 0.1s cubic-bezier(0, 0, 0.2, 1), transform 0.6s cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* Subtle overall rotation for the phyllotaxis field during open/close */
+.color-picker .cp-field {
+  will-change: transform;
+  transform-origin: center center;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.color-picker .cp-dot:hover {
+  width: 25px !important;
+  height: 25px !important;
+}
+
+.color-picker .cp-dot-selected {
+  outline: 0.5px solid #fff;
+  width: 25px !important;
+  height: 25px !important;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.color-picker .cp-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  gap: 20px 12px;
+  align-items: start;
+  height: fit-content;
+  padding: 5px;
+}
+
+.color-picker .cp-triangle {
+  height: 24px;
+  position: relative;
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+
+.color-picker .cp-slider-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.color-picker .cp-slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  background: transparent;
+}
+
+/* Custom slider overlay */
+.color-picker .cp-slider-rail {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 24px; /* match triangle for easier hit */
   cursor: pointer;
+  z-index: 1; /* below handle, above triangle */
 }
-.icon-btn:hover { background: #e8e8e8; }
+.color-picker .cp-slider-handle {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.color-picker .cp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #222;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.color-picker .cp-slider-marks {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  transform: translateY(-50%);
+  height: 24px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  padding: 0 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.color-picker .cp-mark {
+  width: 2px;
+  height: 2px;
+  background: rgba(128, 128, 128, 0.6);
+  border-radius: 2px;
+  justify-self: center;
+}
+
+.color-picker .cp-hex-wrap {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1; /* span both columns */
+}
+
+.color-picker .cp-hex-wrap input {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0 8px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.color-picker .cp-swatches {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 8px;
+  grid-column: 1 / -1; /* span both columns */
+  justify-items: center;
+}
+
+.color-picker .cp-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}

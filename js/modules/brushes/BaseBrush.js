@@ -20,6 +20,12 @@ export class BaseBrush {
   strokeTo(x0, y0, x1, y1) {}
   endStroke() {}
   
+  // Preview helpers
+  getPreviewRadius() {
+    // Default preview is a circle with radius equal to size
+    return this.size;
+  }
+  
   // Utility method for converting hex colors to RGB (now imported from utils)
   static hexToRgb(hex) {
     return hexToRgb(hex);

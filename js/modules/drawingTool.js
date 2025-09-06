@@ -7,7 +7,12 @@ import {
   PencilBrush,
   EraserBrush
 } from './brushes/index.js';
-import { generateUUID as createUUID } from './utils.js';
+import { hexToRgb } from './utils.js';
+import * as storage from './services/storage.js';
+import { RadialController } from './controllers/radialController.js';
+import { ViewportController } from './controllers/viewportController.js';
+import * as symmetry from './math/symmetry.js';
+import { renderBrushPreview } from './render/preview.js';
 
 class DrawingTool {
   constructor() {
@@ -27,25 +32,33 @@ class DrawingTool {
     this.brushRadius = 30;
     this.brushColor = '#ffffff';
 
+    // Background color (rendered behind content)
+    this.backgroundColor = '#000000';
+    // Tracks whether the content canvas has the background color baked into pixels
+    // Older behavior painted background onto content; we convert on first change
+    this._contentHasBakedBackground = true;
+
     // Symmetry
-    this.symmetryAxes = 0; // 0 = off; N>0 draws N rotated copies around center
+    this.symmetryAxes = 1; // 1 = single axis; N>1 draws N rotated copies around center
 
     // Active brush
     this.brushes = {};
     this.activeBrushKey = 'soft';
+    // Per-brush settings
+    this.brushSettings = {
+      soft:   { size: this.brushRadius, color: this.brushColor },
+      pen:    { size: this.brushRadius, color: this.brushColor },
+      air:    { size: this.brushRadius, color: this.brushColor },
+      fountain:{ size: this.brushRadius, color: this.brushColor },
+      pencil: { size: this.brushRadius, color: this.brushColor },
+      eraser: { size: this.brushRadius, color: this.brushColor },
+    };
 
-    // View transform (screen = world * scale + offset)
-    this.scale = 1;
-    this.fitScale = 1; // scale that fits content into viewport
-    this.offsetX = 0;
-    this.offsetY = 0;
+    // Viewport controller (pan/zoom/fit)
+    this.viewport = new ViewportController(this.viewportCanvas);
 
     // Dragging state
     this.isSpacePressed = false;
-    this.dragStartX = 0;
-    this.dragStartY = 0;
-    this.dragStartOffsetX = 0;
-    this.dragStartOffsetY = 0;
 
     // Pinch zoom state
     this.isPinching = false;
@@ -60,10 +73,29 @@ class DrawingTool {
     this.touchStartY = 0;
     this.isTouchGesture = false;
 
+    // Radial (settings) controller
+    this.radial = new RadialController();
+    this.longPressTimeoutId = null;
+
+    // Desktop hover preview state
+    this._isPointerInCanvas = false;
+    this._lastPointerClientX = 0;
+    this._lastPointerClientY = 0;
+
+    // History stacks for undo/redo
+    this.history = [];
+    this.redoStack = [];
+    this.maxHistory = 50;
+
+    // Focus mode removed
+
     // Bind resize handler
     this.handleResize = this.handleResize.bind(this);
 
     this.setupModal();
+
+    // Expose for UI helpers
+    try { window.drawingTool = this; } catch(_) {}
   }
 
   setupModal() {
@@ -75,6 +107,31 @@ class DrawingTool {
       e.preventDefault();
       this.handleSetupSubmit();
     });
+
+    // Toggle inputs based on mode; in upload mode hide size/color and show import button
+    const modeRadios = form.querySelectorAll('input[name="mode"]');
+    const widthGroup = form.querySelector('label[for="canvasWidth"]').parentElement;
+    const heightGroup = form.querySelector('label[for="canvasHeight"]').parentElement;
+    const colorGroup = form.querySelector('label[for="backgroundColor"]').parentElement;
+    const importActionGroup = document.getElementById('importActionGroup');
+    const submitBtn = document.getElementById('setupSubmitBtn');
+    const fileInput = document.getElementById('fileInput');
+    const importBtn = document.getElementById('importFromSetupBtn');
+    const applyVisibility = () => {
+      const mode = form.querySelector('input[name="mode"]:checked').value;
+      const isUpload = mode === 'upload';
+      widthGroup.style.display = isUpload ? 'none' : '';
+      heightGroup.style.display = isUpload ? 'none' : '';
+      colorGroup.style.display = isUpload ? 'none' : '';
+      importActionGroup.style.display = isUpload ? '' : 'none';
+      submitBtn.style.display = isUpload ? 'none' : '';
+    };
+    modeRadios.forEach(r => r.addEventListener('change', applyVisibility));
+    applyVisibility();
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    }
   }
 
   showError(message) {
@@ -101,11 +158,11 @@ class DrawingTool {
     const maxH = parseInt(heightInput.max) || 10000;
 
     if (Number.isNaN(width) || Number.isNaN(height)) {
-      this.showError('Խնդրում եմ մուտքագրել թվային չափեր լայնության և բարձրության համար.');
+      this.showError('Please enter numeric values for width and height.');
       return;
     }
     if (width < minW || width > maxW || height < minH || height > maxH) {
-      this.showError(`Չափերը սխալ են։ Լայնությունը պետք է լինի ${minW}–${maxW}, բարձրությունը՝ ${minH}–${maxH} պիքսել.`);
+      this.showError(`The dimensions are incorrect. The width must be between ${minW}–${maxW}, the height must be between ${minH}–${maxH} pixels.`);
       return;
     }
     // Initialize content canvas at requested resolution
@@ -115,6 +172,17 @@ class DrawingTool {
 
     document.getElementById('setupModal').style.display = 'none';
     document.body.classList.remove('modal-open');
+    // Animate settings bar emerging after setup closes
+    try {
+      const bar = document.querySelector('.settings-bar');
+      if (bar) {
+        bar.classList.add('settings-enter', 'content-hidden');
+        requestAnimationFrame(() => {
+          bar.classList.remove('settings-enter');
+          setTimeout(() => { bar.classList.remove('content-hidden'); }, 140);
+        });
+      }
+    } catch (_) {}
 
     if (mode === 'draw') {
       this.init();
@@ -127,33 +195,42 @@ class DrawingTool {
   }
 
   init() {
-    // Initialize content canvas background and brush
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    // Initialize background and brush
+    this.backgroundColor = document.getElementById('backgroundColor').value;
+    // Keep content transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.contentCtx.strokeStyle = this.brushColor;
     this.contentCtx.lineWidth = 1;
     this.contentCtx.lineCap = 'round';
     this.contentCtx.lineJoin = 'round';
     this.initializeBrushes();
 
+    // New behavior: content has no baked background
+    this._contentHasBakedBackground = false;
+
     // Prepare viewport and fit content
-    this.resizeViewportCanvas();
-    this.fitContentToViewport();
+    this.viewport.resizeBackingStore();
+    this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Seed initial history state
+    this._pushHistorySnapshot();
   }
 
   initForUpload() {
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    this.backgroundColor = document.getElementById('backgroundColor').value;
+    // Keep content transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.contentCtx.strokeStyle = this.brushColor;
     this.contentCtx.lineWidth = 1;
     this.contentCtx.lineCap = 'round';
     this.contentCtx.lineJoin = 'round';
     this.initializeBrushes();
 
-    this.resizeViewportCanvas();
-    this.fitContentToViewport();
+    this.viewport.resizeBackingStore();
+    this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Seed initial history state
+    this._pushHistorySnapshot();
   }
 
   initializeBrushes() {
@@ -166,8 +243,11 @@ class DrawingTool {
       pencil: new PencilBrush(this.contentCtx),
       eraser: new EraserBrush(this.contentCtx, () => document.getElementById('backgroundColor').value),
     };
-    // Sync base properties
-    Object.values(this.brushes).forEach(b => { b.setSize(this.brushRadius); b.setColor(this.brushColor); });
+    // Sync base properties (use universal size/color)
+    Object.values(this.brushes).forEach((b) => {
+      b.setSize(this.brushRadius);
+      if (b.setColor) b.setColor(this.brushColor);
+    });
   }
 
   setupEventListeners() {
@@ -180,6 +260,9 @@ class DrawingTool {
     this.viewportCanvas.addEventListener('touchmove', this.handleTouch.bind(this), { passive: false });
     this.viewportCanvas.addEventListener('touchend', this.stopDrawing.bind(this));
 
+    // Prevent default context menu so right-click can be used for radial
+    window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+
     // Wheel: handle desktop pinch-to-zoom (ctrlKey=true) only; normal wheel scroll passes through
     this.viewportCanvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
 
@@ -188,15 +271,44 @@ class DrawingTool {
     document.addEventListener('keyup', this.handleKeyUp.bind(this));
 
     // Controls
-    document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
-    document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
-    const uploadBtn = document.getElementById('uploadBtn');
+    document.getElementById('clearBtn') && document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
+    document.getElementById('saveBtn') && document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
     const fileInput = document.getElementById('fileInput');
-    uploadBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    if (fileInput) {
+      // File input is wired from setup modal now; keep listener
+      fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    }
 
     // Resize viewport when window resizes
     window.addEventListener('resize', this.handleResize);
+
+    // Track pointer presence for desktop hover preview
+    this.viewportCanvas.addEventListener('mouseenter', (e) => {
+      this._isPointerInCanvas = true;
+    });
+    this.viewportCanvas.addEventListener('mouseleave', (e) => {
+      this._isPointerInCanvas = false;
+      this.render();
+    });
+    this.viewportCanvas.addEventListener('mousemove', (e) => {
+      this._lastPointerClientX = e.clientX;
+      this._lastPointerClientY = e.clientY;
+      if (!this.isDrawing && !this.radial.isOpen()) this.render();
+    });
+
+    // Focus size-change event removed.
+
+    // Select brush from radial focus UI
+    document.addEventListener('brush:select', (e) => {
+      const key = e.detail && e.detail.key ? e.detail.key : null;
+      if (!key) return;
+      this.setActiveBrushByKey(key);
+      if (window.brushRing && window.brushRing.setButtonVisuals) window.brushRing.setButtonVisuals(this.activeBrushKey);
+    });
+
+    // Focus exit removed.
+
+    // Focus click-to-exit removed.
 
     // Floating settings UI
     const fabToggle = document.getElementById('fabToggle');
@@ -206,20 +318,9 @@ class DrawingTool {
     const sizeInput = document.getElementById('brushSizeInput');
     const symmetryAxesInput = document.getElementById('symmetryAxesInput');
     const fitBtn = document.getElementById('fitViewBtn');
-    const brushButtons = Array.from(document.querySelectorAll('.brush-btn'));
+    const brushGroupEl = document.querySelector('.brush-group');
 
-    if (fabToggle && settingsPanel) {
-      fabToggle.addEventListener('click', () => {
-        const isHidden = settingsPanel.hasAttribute('hidden');
-        if (isHidden) {
-          settingsPanel.removeAttribute('hidden');
-          fabToggle.setAttribute('aria-expanded', 'true');
-        } else {
-          settingsPanel.setAttribute('hidden', '');
-          fabToggle.setAttribute('aria-expanded', 'false');
-        }
-      });
-    }
+    // Floating button removed; open via right-click/long-press instead
     if (closeSettingsBtn && settingsPanel && fabToggle) {
       closeSettingsBtn.addEventListener('click', () => {
         settingsPanel.setAttribute('hidden', '');
@@ -228,10 +329,15 @@ class DrawingTool {
     }
 
     if (colorInput) {
+      // Initialize color input with universal color
       colorInput.value = this.brushColor;
       colorInput.addEventListener('input', (e) => {
-        this.brushColor = e.target.value || '#ffffff';
-        Object.values(this.brushes).forEach(b => b.setColor(this.brushColor));
+        const newColor = e.target.value || '#ffffff';
+        // Set universal color
+        this.brushColor = newColor;
+        // Apply to all brushes
+        Object.values(this.brushes).forEach((b) => { if (b.setColor) b.setColor(newColor); });
+        this.render();
       });
     }
     if (sizeInput) {
@@ -239,7 +345,8 @@ class DrawingTool {
       sizeInput.addEventListener('input', (e) => {
         const val = Math.max(1, Math.min(400, parseInt(e.target.value || '1', 10)));
         this.brushRadius = val;
-        Object.values(this.brushes).forEach(b => b.setSize(val));
+        Object.values(this.brushes).forEach((b) => b.setSize(val));
+        this.render();
       });
     }
     if (symmetryAxesInput) {
@@ -270,24 +377,58 @@ class DrawingTool {
       });
     }
     
-    if (brushButtons.length) {
-      brushButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          brushButtons.forEach(b => b.classList.remove('selected'));
-          btn.classList.add('selected');
-          this.activeBrushKey = btn.getAttribute('data-brush') || 'soft';
-        });
+    if (brushGroupEl) {
+      brushGroupEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('.brush-btn');
+        if (!btn || !brushGroupEl.contains(btn)) return;
+        this.activeBrushKey = btn.getAttribute('data-brush') || 'soft';
+        this._applyActiveBrushSettingsToUIAndBrush();
+        if (window.brushRing && window.brushRing.setButtonVisuals) {
+          window.brushRing.setButtonVisuals(this.activeBrushKey);
+        }
+      });
+      brushGroupEl.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.brush-btn')) {
+          e.preventDefault();
+          e.target.click();
+        }
       });
     }
     if (fitBtn) {
       fitBtn.addEventListener('click', () => {
-        this.fitContentToViewport();
+        this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
         this.render();
       });
     }
   }
 
   handleKeyDown(e) {
+    // Ignore shortcuts while typing in inputs or contenteditable areas
+    const active = document.activeElement;
+    const tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+    const isTextField = tag === 'input' || tag === 'textarea' || (active && active.isContentEditable);
+
+    // Global app shortcuts
+    const isModifier = (e.ctrlKey || e.metaKey) && !isTextField;
+    if (isModifier) {
+      const key = (e.key || '').toLowerCase();
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) this.redo(); else this.undo();
+        return;
+      }
+      if (key === 'y') {
+        e.preventDefault();
+        this.redo();
+        return;
+      }
+      if (key === 's') {
+        e.preventDefault();
+        this.saveImage();
+        return;
+      }
+    }
+
     if (e.code === 'Space' && !this.isSpacePressed) {
       e.preventDefault();
       this.isSpacePressed = true;
@@ -304,76 +445,23 @@ class DrawingTool {
   }
 
   getMousePos(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    // Convert screen (CSS px) to world/content coordinates using inverse transform
-    return {
-      x: (mx - this.offsetX) / this.scale,
-      y: (my - this.offsetY) / this.scale
-    };
+    return this.viewport.worldFromClient(e.clientX, e.clientY);
   }
 
   getTouchPos(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const mx = touch.clientX - rect.left;
-    const my = touch.clientY - rect.top;
-    return {
-      x: (mx - this.offsetX) / this.scale,
-      y: (my - this.offsetY) / this.scale
-    };
+    const t = e.touches[0];
+    return this.viewport.worldFromClient(t.clientX, t.clientY);
   }
 
-  // Compute midpoint of two touches in screen space (CSS px)
-  _getTouchesMidpoint(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const t0 = e.touches[0];
-    const t1 = e.touches[1];
-    const mx = ((t0.clientX + t1.clientX) / 2) - rect.left;
-    const my = ((t0.clientY + t1.clientY) / 2) - rect.top;
-    return { mx, my };
-  }
-
-  // Distance between first two touches in screen space (CSS px)
-  _getTouchesDistance(e) {
-    const t0 = e.touches[0];
-    const t1 = e.touches[1];
-    const dx = t1.clientX - t0.clientX;
-    const dy = t1.clientY - t0.clientY;
-    return Math.hypot(dx, dy);
-  }
-
-  _beginPinch(e) {
-    if (!e.touches || e.touches.length < 2) return;
-    this.isPinching = true;
-    this.pinchStartDistance = this._getTouchesDistance(e);
-    this.pinchStartScale = this.scale;
-    const { mx, my } = this._getTouchesMidpoint(e);
-    // Store the world coords under the midpoint to keep it stable while zooming
-    this.pinchWorldMidX = (mx - this.offsetX) / this.scale;
-    this.pinchWorldMidY = (my - this.offsetY) / this.scale;
-  }
-
-  _updatePinch(e) {
-    if (!this.isPinching || !e.touches || e.touches.length < 2) return;
-    const currentDistance = this._getTouchesDistance(e);
-    if (this.pinchStartDistance <= 0) return;
-    const factor = currentDistance / this.pinchStartDistance;
-    // Clamp scale
-    const minScale = Math.max(this.fitScale * 0.25, 0.05);
-    const maxScale = 32;
-    const newScale = Math.min(maxScale, Math.max(minScale, this.pinchStartScale * factor));
-
-    // Adjust offset so the world point under pinch midpoint remains stationary
-    const { mx, my } = this._getTouchesMidpoint(e);
-    this.scale = newScale;
-    this.offsetX = mx - this.pinchWorldMidX * this.scale;
-    this.offsetY = my - this.pinchWorldMidY * this.scale;
-    this.render();
-  }
+  // Pinch/zoom handled by ViewportController
 
   startDrawing(e) {
+    // Focus mode removed
+    // Right-click opens radial selection and suspends drawing
+    if (e && e.button === 2) {
+      this.radial.openAt(e.clientX, e.clientY, { via: 'mouse' });
+      return;
+    }
     if (this.isSpacePressed) {
       // Start dragging
       this.isDragging = true;
@@ -395,6 +483,16 @@ class DrawingTool {
   }
 
   draw(e) {
+    // Focus mode removed
+    // While radial is open, update hover selection and skip drawing
+    if (this.radial.isOpen()) {
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        this.radial.updateHover(clientX, clientY);
+      }
+      return;
+    }
     if (this.isDragging) {
       // Handle canvas dragging
       const deltaX = e.clientX - this.dragStartX;
@@ -418,6 +516,7 @@ class DrawingTool {
 
   handleTouch(e) {
     e.preventDefault();
+    // Focus mode removed
     const pos = this.getTouchPos(e);
     if (e.type === 'touchstart') {
       // Record touch start for gesture detection
@@ -445,19 +544,27 @@ class DrawingTool {
         return;
       }
 
-      // Start drawing immediately for single-finger touch
-      this.isDrawing = true;
-      this.lastX = pos.x;
-      this.lastY = pos.y;
-      this._symmetryBeginAndDot(pos.x, pos.y);
-      this.render();
+      // Schedule long-press to open radial; defer drawing until move
+      this.isDrawing = false;
+      this.isLongPressSelecting = false;
+      if (this.longPressTimeoutId) clearTimeout(this.longPressTimeoutId);
+      const startClientX = e.touches[0].clientX;
+      const startClientY = e.touches[0].clientY;
+      this.longPressTimeoutId = setTimeout(() => {
+        // If still single touch and not dragging/pinching, open radial
+        if (!this.isDragging && !this.isPinching) {
+          this.radial.openAt(startClientX, startClientY, { via: 'touch' });
+          this.radial.setLongPressSelecting(true);
+          this.radial.updateHover(startClientX, startClientY);
+        }
+      }, 400);
     } else if (e.type === 'touchmove') {
       // Handle active pinch gesture
       if (this.isPinching && e.touches && e.touches.length >= 2) {
         this._updatePinch(e);
         return;
       }
-      // Single-finger moves are for drawing; two-finger handled above
+      // Single-finger moves are for drawing or radial selection; two-finger handled above
 
       if (this.isDragging) {
         // Handle canvas dragging
@@ -468,7 +575,21 @@ class DrawingTool {
         this.render();
         return;
       }
-
+      const touch = e.touches[0];
+      if (this.radial.isOpen() && this.radial.isLongPressSelecting() && touch) {
+        this.radial.updateHover(touch.clientX, touch.clientY);
+        return;
+      }
+      // If long-press hasn't triggered yet, start drawing on movement and cancel timer
+      if (!this.isDrawing && !this.radial.isOpen()) {
+        if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
+        this.isDrawing = true;
+        this.lastX = pos.x;
+        this.lastY = pos.y;
+        this._symmetryBeginAndDot(pos.x, pos.y);
+        this.render();
+        return;
+      }
       if (this.isDrawing) {
         this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
         this.lastX = pos.x;
@@ -486,10 +607,23 @@ class DrawingTool {
       this.isDragging = false;
       this.dragStartX = 0;
       this.dragStartY = 0;
+      if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
+      if (this.radial.isOpen() && this.radial.isLongPressSelecting()) {
+        this.radial.finalizeSelection();
+        return;
+      }
     }
   }
 
-  stopDrawing() {
+  stopDrawing(e) {
+    // If radial menu is open, only finalize on release, ignore mouseout
+    if (this.radial.isOpen()) {
+      const type = e && e.type;
+      if (type === 'mouseup' || type === 'touchend' || type === 'touchcancel') {
+        this.radial.finalizeSelection(e);
+      }
+      return;
+    }
     if (this.isDragging) {
       this.isDragging = false;
       if (this.isSpacePressed) {
@@ -500,13 +634,19 @@ class DrawingTool {
 
     this.isDrawing = false;
     const brush = this.getActiveBrush();
-    if (brush.endStroke) brush.endStroke();
+    if (brush.endStroke) this._symmetryEndStroke();
+    // Snapshot after finishing a stroke
+    this._pushHistorySnapshot();
   }
 
+  // --- Radial settings helpers moved to controllers/RadialController ---
+
   clearCanvas() {
-    this.contentCtx.fillStyle = document.getElementById('backgroundColor').value;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    // Clear drawing content to transparent; background is drawn during render
+    this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Push history so clear is undoable
+    this._pushHistorySnapshot();
   }
 
   changeBackgroundColor(color) {
@@ -515,211 +655,162 @@ class DrawingTool {
     if (bgColorInput) {
       bgColorInput.value = color;
     }
-    
-    // Redraw the entire canvas with new background color
-    this.contentCtx.fillStyle = color;
-    this.contentCtx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
-    
-    // Re-render to show the change
+
+    // If content still has a baked background, attempt to convert the previous
+    // background color to transparency so future background changes are instant.
+    if (this._contentHasBakedBackground) {
+      const prevColor = this.backgroundColor;
+      try {
+        this._unbakeBackgroundColor(prevColor);
+        this._contentHasBakedBackground = false;
+      } catch (_) {
+        // If conversion fails, continue; user will still see new bg behind content
+      }
+    }
+
+    // Update background color and re-render
+    this.backgroundColor = color;
     this.render();
   }
 
-  saveImage() {
-    this.contentCanvas.toBlob(async (blob) => {
-      try {
-        const uuid = this.generateUUID();
-        const filename = `${uuid}.jpg`;
-        const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
-        const uploadUrl = supabaseUrl + filename;
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
-          },
-          body: formData
-        });
-        if (response.ok) {
-          const publicUrl = `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-          window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
-        } else {
-          throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
-        }
-      } catch (error) {
-        console.error('Վայ չստացվեց...:', error);
-        window.alert(`Վայ չստացվեց...: ${error.message}\n\n Փոխարենը՝ նկարդ քո համակարգչին ներբեռնեցի`);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const fallbackFilename = `drawing-${timestamp}.jpg`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fallbackFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+  _unbakeBackgroundColor(prevHex) {
+    if (!prevHex || this.contentCanvas.width === 0 || this.contentCanvas.height === 0) return;
+    const { r: tr, g: tg, b: tb } = hexToRgb(prevHex);
+    const imgData = this.contentCtx.getImageData(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      if (a === 255 && r === tr && g === tg && b === tb) {
+        // Make previous background pixels transparent
+        data[i + 3] = 0;
       }
-    }, 'image/jpeg', 0.95);
+    }
+    this.contentCtx.putImageData(imgData, 0, 0);
+  }
+
+  saveImage() {
+    // Composite background behind content for formats without alpha (JPEG)
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = this.contentCanvas.width;
+    outCanvas.height = this.contentCanvas.height;
+    const outCtx = outCanvas.getContext('2d');
+    outCtx.fillStyle = this.backgroundColor || '#000000';
+    outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+    outCtx.drawImage(this.contentCanvas, 0, 0);
+
+    (async () => {
+      try {
+        const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
+        const filename = storage.createFilename('jpg');
+        const publicUrl = await storage.uploadBlobToSupabase(blob, filename);
+        window.alert(`Successfully uploaded the image!\n\n You can use this URL to embed the image: \n\n ${publicUrl}\n\n`);
+      } catch (error) {
+        console.error('Failed to upload the image:', error);
+        window.alert(`Failed to upload the image: ${error.message}\n\n Instead, I downloaded the image to your computer.`);
+        try {
+          const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const fallbackFilename = `drawing-${timestamp}.jpg`;
+          const url = storage.fileOrBlobToObjectUrl(blob);
+          storage.fileOrBlobDownload(url, fallbackFilename);
+          storage.revokeObjectUrl(url);
+        } catch (_) {}
+      }
+    })();
+  }
+
+  // --- Undo/Redo stubs ---
+  undo() {
+    // Need at least two states: current and a previous one
+    if (this.history.length <= 1) return;
+    // Pop current and move it to redo
+    const current = this.history.pop();
+    this.redoStack.push(current);
+    // Apply new top (previous state)
+    const prev = this.history[this.history.length - 1];
+    this._applySnapshot(prev);
+    this.render();
+  }
+  redo() {
+    if (this.redoStack.length === 0) return;
+    const next = this.redoStack.pop();
+    // Apply and push as new current
+    this._applySnapshot(next);
+    this.history.push(next);
+    this.render();
+  }
+
+  _captureSnapshot() {
+    // Snapshot only content pixels (alpha preserved). Store as ImageData for speed/memory
+    try {
+      return this.contentCtx.getImageData(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    } catch (_) {
+      // Fallback to offscreen canvas if tainted or other issues
+      const c = document.createElement('canvas');
+      c.width = this.contentCanvas.width;
+      c.height = this.contentCanvas.height;
+      c.getContext('2d').drawImage(this.contentCanvas, 0, 0);
+      return c;
+    }
+  }
+
+  _applySnapshot(snap) {
+    if (!snap) return;
+    if (snap instanceof ImageData) {
+      this.contentCtx.putImageData(snap, 0, 0);
+    } else if (snap instanceof HTMLCanvasElement) {
+      this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+      this.contentCtx.drawImage(snap, 0, 0);
+    }
+  }
+
+  _pushHistorySnapshot() {
+    const snap = this._captureSnapshot();
+    const last = this.history[this.history.length - 1];
+    // Deduplicate identical sizes and content by comparing dimensions and a small sample
+    if (last && last.width === snap.width && last.height === snap.height) {
+      try {
+        const a = last.data, b = snap.data;
+        let same = true;
+        for (let i = 0; i < a.length; i += Math.max(16, (a.length / 1024) | 0)) {
+          if (a[i] !== b[i] || a[i+1] !== b[i+1] || a[i+2] !== b[i+2] || a[i+3] !== b[i+3]) { same = false; break; }
+        }
+        if (same) return; // skip pushing identical snapshot
+      } catch (_) {}
+    }
+    // Clear redo on new distinct action
+    this.redoStack.length = 0;
+    this.history.push(snap);
+    if (this.history.length > this.maxHistory) this.history.shift();
   }
 
   async handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const uuid = this.generateUUID();
-      const filename = `${uuid}.jpg`;
-      const supabaseUrl = 'https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/ai-art-files-bucket/';
-      const uploadUrl = supabaseUrl + filename;
-      let uploadBlob = file;
-      if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
-        const img = await this.fileToImage(file);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        uploadBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.95));
-      }
-      const formData = new FormData();
-      formData.append('file', uploadBlob, filename);
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYWt3bGRxaHJ1bGJzd3lpcW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MDMwNzEsImV4cCI6MjA2Nzk3OTA3MX0.z7SQGca7x0o1pzAaCyZpZDk4IIdhnImUZAdEr-PtGlQ'
-        },
-        body: formData
-      });
-      if (response.ok) {
-        const publicUrl = this.generatePublicLink(filename);
-        window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
-      } else {
-        throw new Error(`Վայ չստացվեց...: ${response.status} ${response.statusText}`);
-      }
+      const filename = storage.createFilename('jpg');
+      const jpegBlob = await storage.ensureJpegBlob(file);
+      const publicUrl = await storage.uploadBlobToSupabase(jpegBlob, filename);
+      window.alert(`Successfully uploaded the image!\n\n You can use this URL to embed the image: \n\n ${publicUrl}\n\n`);
     } catch (error) {
-      console.error('Վայ չստացվեց...:', error);
-      window.alert(`Վայ չստացվեց...: ${error.message}`);
+      console.error('Failed to upload the image:', error);
+      window.alert(`Failed to upload the image: ${error.message}`);
     } finally {
       e.target.value = '';
     }
   }
 
-  fileToImage(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = function (event) {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = event.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  generateUUID() {
-    return createUUID();
-  }
-
-  generatePublicLink(filename) {
-    return `https://wfakwldqhrulbswyiqom.supabase.co/storage/v1/object/public/ai-art-files-bucket/${filename}`;
-  }
-
-  // --- Viewport helpers ---
-  resizeViewportCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    // Set canvas internal resolution to match CSS size * DPR for crisp rendering
-    this.viewportCanvas.width = Math.max(1, Math.round(rect.width * dpr));
-    this.viewportCanvas.height = Math.max(1, Math.round(rect.height * dpr));
-  }
-
-  fitContentToViewport() {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    const vw = rect.width;
-    const vh = rect.height;
-    const cw = this.contentCanvas.width;
-    const ch = this.contentCanvas.height;
-    if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return;
-    this.fitScale = Math.min(vw / cw, vh / ch);
-    this.scale = this.fitScale;
-    this.offsetX = (vw - cw * this.scale) / 2;
-    this.offsetY = (vh - ch * this.scale) / 2;
-  }
-
-  
 
   handleResize() {
-    const prevRect = this.viewportCanvas.getBoundingClientRect();
-    const prevCenterScreen = { x: prevRect.width / 2, y: prevRect.height / 2 };
-    const prevCenterWorld = {
-      x: (prevCenterScreen.x - this.offsetX) / this.scale,
-      y: (prevCenterScreen.y - this.offsetY) / this.scale,
-    };
-    const prevScale = this.scale;
-    const prevFit = this.fitScale;
-
-    // Resize viewport backing store
-    this.resizeViewportCanvas();
-
-    // Recompute fit scale for the new viewport size
-    this.fitContentToViewport();
-
-    // Decide new scale: if user had custom zoom, keep it; otherwise stick to fit
-    const userHadCustomZoom = Math.abs(prevScale - prevFit) > 1e-6;
-    this.scale = userHadCustomZoom ? prevScale : this.fitScale;
-
-    // Recenter so previous world center stays under screen center
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    this.offsetX = rect.width / 2 - prevCenterWorld.x * this.scale;
-    this.offsetY = rect.height / 2 - prevCenterWorld.y * this.scale;
-
+    this.viewport.onResize(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
   }
 
   handleWheel(e) {
-    const rect = this.viewportCanvas.getBoundingClientRect();
-    // Desktop pinch-to-zoom (ctrlKey=true)
-    if (e.ctrlKey) {
-      e.preventDefault();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const worldXBefore = (mouseX - this.offsetX) / this.scale;
-      const worldYBefore = (mouseY - this.offsetY) / this.scale;
-
-      // Zoom factor: smooth exponential zoom
-      const zoomIntensity = 0.005 ; // smaller = slower zoom
-      const factor = Math.exp(-e.deltaY * zoomIntensity);
-
-      // Clamp scale
-      const minScale = Math.max(this.fitScale * 0.25, 0.05);
-      const maxScale = 32;
-      const newScale = Math.min(maxScale, Math.max(minScale, this.scale * factor));
-      this.scale = newScale;
-
-      // Keep world point under cursor fixed
-      this.offsetX = mouseX - worldXBefore * this.scale;
-      this.offsetY = mouseY - worldYBefore * this.scale;
-
-      this.render();
-      return;
-    }
-
-    // Otherwise: pan the canvas with wheel deltas (vertical and horizontal)
-    e.preventDefault();
-    const unit = e.deltaMode === 1 ? 32 : (e.deltaMode === 2 ? rect.height : 1);
-    let dx = e.deltaX;
-    let dy = e.deltaY;
-    // Many mice emit horizontal pan as Shift+vertical; map that when deltaX is 0
-    if (e.shiftKey && Math.abs(dx) < 1 && Math.abs(dy) >= 1) {
-      dx = dy;
-      dy = 0;
-    }
-    // Scroll down should move content up (inverse relationship)
-    this.offsetX -= dx * unit;
-    this.offsetY -= dy * unit;
+    this.viewport.wheel(e);
     this.render();
   }
 
@@ -741,65 +832,125 @@ class DrawingTool {
     ctx.clearRect(0, 0, this.viewportCanvas.width, this.viewportCanvas.height);
 
     // Apply composite transform (DPR first, then world transform)
-    ctx.setTransform(this.scale * dpr, 0, 0, this.scale * dpr, this.offsetX * dpr, this.offsetY * dpr);
+    ctx.setTransform(this.viewport.scale * dpr, 0, 0, this.viewport.scale * dpr, this.viewport.offsetX * dpr, this.viewport.offsetY * dpr);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    // Draw background behind content area
+    ctx.fillStyle = this.backgroundColor || '#000000';
+    ctx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     ctx.drawImage(this.contentCanvas, 0, 0);
+
+    // Draw symmetry axes guide when enabled
+    this._renderSymmetryAxes(ctx, dpr);
+
+    // Draw desktop brush hover preview on top of content (only when not drawing and pointer is in canvas)
+    if (!this.isDrawing && this._isPointerInCanvas) {
+      this._renderBrushPreview(ctx, dpr);
+    }
   }
 
   getActiveBrush() {
     return this.brushes[this.activeBrushKey] || this.brushes.soft;
   }
 
-  // --- Symmetry helpers ---
-  _getCanvasCenter() {
-    return { x: this.contentCanvas.width / 2, y: this.contentCanvas.height / 2 };
-  }
-
-  _rotatePointAround(x, y, cx, cy, angleRad) {
-    const cosA = Math.cos(angleRad);
-    const sinA = Math.sin(angleRad);
-    const dx = x - cx;
-    const dy = y - cy;
-    return { x: cx + dx * cosA - dy * sinA, y: cy + dx * sinA + dy * cosA };
-  }
-
+  // --- Symmetry helpers (delegated)
   _symmetryBeginAndDot(x, y) {
     const brush = this.getActiveBrush();
     const axes = this.symmetryAxes | 0;
-    if (!axes) {
-      brush.beginStroke(x, y);
-      brush.strokeTo(x, y, x, y);
-      return;
-    }
-    const { x: cx, y: cy } = this._getCanvasCenter();
-    for (let i = 0; i < axes; i++) {
-      const angle = (i * Math.PI * 2) / axes;
-      const p = this._rotatePointAround(x, y, cx, cy, angle);
-      brush.beginStroke(p.x, p.y);
-      brush.strokeTo(p.x, p.y, p.x, p.y);
-    }
+    const { x: cx, y: cy } = symmetry.getCanvasCenter(this.contentCanvas);
+    symmetry.beginAndDot(brush, x, y, axes, cx, cy);
   }
 
   _symmetryStroke(x0, y0, x1, y1) {
     const brush = this.getActiveBrush();
     const axes = this.symmetryAxes | 0;
-    if (!axes) {
-      brush.strokeTo(x0, y0, x1, y1);
-      return;
-    }
-    const { x: cx, y: cy } = this._getCanvasCenter();
+    const { x: cx, y: cy } = symmetry.getCanvasCenter(this.contentCanvas);
+    symmetry.stroke(brush, x0, y0, x1, y1, axes, cx, cy);
+  }
+
+  _symmetryEndStroke() {
+    const brush = this.getActiveBrush();
+    const axes = this.symmetryAxes | 0;
+    symmetry.endStroke(brush, axes);
+  }
+
+  _renderBrushPreview(ctx, dpr) {
+    const brush = this.getActiveBrush();
+    const radius = Math.max(1, (brush.getPreviewRadius ? brush.getPreviewRadius() : this.brushRadius));
+    renderBrushPreview(
+      ctx,
+      dpr,
+      this.viewportCanvas,
+      this.viewport.scale,
+      this.viewport.offsetX,
+      this.viewport.offsetY,
+      this._lastPointerClientX,
+      this._lastPointerClientY,
+      radius,
+    );
+  }
+
+  _renderSymmetryAxes(ctx, dpr) {
+    const axes = this.symmetryAxes | 0;
+    if (!axes || axes <= 1) return;
+    const w = this.contentCanvas.width;
+    const h = this.contentCanvas.height;
+    if (w <= 0 || h <= 0) return;
+    const cx = w / 2;
+    const cy = h / 2;
+    const halfDiag = Math.hypot(w, h) * 0.5 + 2;
+
+    ctx.save();
+    // Make line width ~0.5px in screen space
+    const scale = (this.viewport && this.viewport.scale) ? this.viewport.scale : 1;
+    const screenPx = Math.max(0.25, 0.5 / (scale * dpr));
+    ctx.lineWidth = screenPx;
+    ctx.strokeStyle = '#ffffff';
+    ctx.globalAlpha = 0.6;
+    // Draw exactly `axes` rays separated by 2π/N, from center outward (N sectors)
+    ctx.beginPath();
     for (let i = 0; i < axes; i++) {
       const angle = (i * Math.PI * 2) / axes;
-      const p0 = this._rotatePointAround(x0, y0, cx, cy, angle);
-      const p1 = this._rotatePointAround(x1, y1, cx, cy, angle);
-      brush.strokeTo(p0.x, p0.y, p1.x, p1.y);
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + dx * halfDiag, cy + dy * halfDiag);
     }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  getBrushSettings() {
+    // Universal settings for all brushes
+    return { size: this.brushRadius, color: this.brushColor };
+  }
+
+  _applyActiveBrushSettingsToUIAndBrush() {
+    const s = this.getBrushSettings();
+    const colorInput = document.getElementById('brushColorInput');
+    const sizeInput = document.getElementById('brushSizeInput');
+    if (colorInput) colorInput.value = s.color || '#ffffff';
+    if (sizeInput) sizeInput.value = String(s.size || 10);
+    // Apply universal settings to all brushes
+    Object.values(this.brushes).forEach((b) => {
+      b.setSize(s.size || 10);
+      if (b.setColor) b.setColor(s.color || '#ffffff');
+    });
+    // Update hover preview immediately
+    this.render();
+    // Focus color sync removed
+  }
+
+  setActiveBrushByKey(key) {
+    this.activeBrushKey = key || this.activeBrushKey;
+    this._applyActiveBrushSettingsToUIAndBrush();
+  }
+
+  resetPointerStates() {
+    this.isDrawing = false;
+    this.isDragging = false;
+    this.isPinching = false;
   }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  new DrawingTool();
-});
 
 export default DrawingTool;

@@ -158,11 +158,11 @@ class DrawingTool {
     const maxH = parseInt(heightInput.max) || 10000;
 
     if (Number.isNaN(width) || Number.isNaN(height)) {
-      this.showError('Խնդրում եմ մուտքագրել թվային չափեր լայնության և բարձրության համար.');
+      this.showError('Please enter numeric values for width and height.');
       return;
     }
     if (width < minW || width > maxW || height < minH || height > maxH) {
-      this.showError(`Չափերը սխալ են։ Լայնությունը պետք է լինի ${minW}–${maxW}, բարձրությունը՝ ${minH}–${maxH} պիքսել.`);
+      this.showError(`The dimensions are incorrect. The width must be between ${minW}–${maxW}, the height must be between ${minH}–${maxH} pixels.`);
       return;
     }
     // Initialize content canvas at requested resolution
@@ -706,10 +706,10 @@ class DrawingTool {
         const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
         const filename = storage.createFilename('jpg');
         const publicUrl = await storage.uploadBlobToSupabase(blob, filename);
-        window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
+        window.alert(`Successfully uploaded the image!\n\n You can use this URL to embed the image: \n\n ${publicUrl}\n\n`);
       } catch (error) {
-        console.error('Վայ չստացվեց...:', error);
-        window.alert(`Վայ չստացվեց...: ${error.message}\n\n Փոխարենը՝ նկարդ քո համակարգչին ներբեռնեցի`);
+        console.error('Failed to upload the image:', error);
+        window.alert(`Failed to upload the image: ${error.message}\n\n Instead, I downloaded the image to your computer.`);
         try {
           const blob = await storage.canvasToJpegBlob(outCanvas, 0.95);
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -794,10 +794,10 @@ class DrawingTool {
       const filename = storage.createFilename('jpg');
       const jpegBlob = await storage.ensureJpegBlob(file);
       const publicUrl = await storage.uploadBlobToSupabase(jpegBlob, filename);
-      window.alert(`Ապրե´ս, նկարը հաջողությամբ ներմուծվեց!\n\n Կարող ես կոդումդ դնել այս հասցեն նկարն օգտագործելու համար: \n\n ${publicUrl}\n\n`);
+      window.alert(`Successfully uploaded the image!\n\n You can use this URL to embed the image: \n\n ${publicUrl}\n\n`);
     } catch (error) {
-      console.error('Վայ չստացվեց...:', error);
-      window.alert(`Վայ չստացվեց...: ${error.message}`);
+      console.error('Failed to upload the image:', error);
+      window.alert(`Failed to upload the image: ${error.message}`);
     } finally {
       e.target.value = '';
     }

@@ -22,8 +22,9 @@ export function beginAndDot(brush, x, y, axes, centerX, centerY) {
   for (let i = 0; i < count; i++) {
     const angle = (i * Math.PI * 2) / count;
     const p = rotatePointAround(x, y, centerX, centerY, angle);
-    brush.beginStroke(p.x, p.y);
-    brush.strokeTo(p.x, p.y, p.x, p.y);
+    // Pass stroke ID for stateful brushes like FountainPen
+    brush.beginStroke(p.x, p.y, i);
+    brush.strokeTo(p.x, p.y, p.x, p.y, i);
   }
 }
 
@@ -37,7 +38,20 @@ export function stroke(brush, x0, y0, x1, y1, axes, centerX, centerY) {
     const angle = (i * Math.PI * 2) / count;
     const p0 = rotatePointAround(x0, y0, centerX, centerY, angle);
     const p1 = rotatePointAround(x1, y1, centerX, centerY, angle);
-    brush.strokeTo(p0.x, p0.y, p1.x, p1.y);
+    // Pass stroke ID for stateful brushes like FountainPen
+    brush.strokeTo(p0.x, p0.y, p1.x, p1.y, i);
+  }
+}
+
+export function endStroke(brush, axes) {
+  const count = axes | 0;
+  if (!count) {
+    brush.endStroke();
+    return;
+  }
+  for (let i = 0; i < count; i++) {
+    // End each symmetry stroke
+    brush.endStroke(i);
   }
 }
 

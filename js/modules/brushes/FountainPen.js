@@ -13,9 +13,32 @@ export class FountainPen extends BaseBrush {
     this.smoothing = 0.7; // Smoothing factor for radius changes
     this.points = []; // Collected points for curve smoothing
     this.sampleResolution = 0.35; // Smaller = more stamps per pixel, smoother
+    
+    // Symmetry support: track multiple stroke states
+    this.symmetryStates = new Map(); // key: strokeId, value: state object
+    this.currentStrokeId = 0;
+    this.isSymmetryMode = false;
   }
 
-  beginStroke(x, y) {
+  beginStroke(x, y, strokeId = null) {
+    // If strokeId is provided, we're in symmetry mode
+    if (strokeId !== null) {
+      this.isSymmetryMode = true;
+      const state = {
+        lastX: x,
+        lastY: y,
+        lastTime: performance.now(),
+        currentRadius: this.minRadius,
+        points: [{ x, y, r: this.minRadius }]
+      };
+      this.symmetryStates.set(strokeId, state);
+      this.drawCircle(x, y, this.minRadius);
+      return;
+    }
+
+    // Normal single stroke mode
+    this.isSymmetryMode = false;
+    this.symmetryStates.clear();
     this.lastX = x;
     this.lastY = y;
     this.lastTime = performance.now();
@@ -26,7 +49,14 @@ export class FountainPen extends BaseBrush {
     this.drawCircle(x, y, this.currentRadius);
   }
   
-  strokeTo(x0, y0, x1, y1) {
+  strokeTo(x0, y0, x1, y1, strokeId = null) {
+    // If strokeId is provided, we're in symmetry mode - use separate state
+    if (strokeId !== null && this.symmetryStates.has(strokeId)) {
+      this._strokeToSymmetry(x0, y0, x1, y1, strokeId);
+      return;
+    }
+
+    // Normal single stroke mode
     const currentTime = performance.now();
     const timeDelta = Math.max(1, currentTime - this.lastTime);
     const distance = Math.hypot(x1 - x0, y1 - y0);
@@ -61,10 +91,55 @@ export class FountainPen extends BaseBrush {
     this.lastY = y1;
     this.lastTime = currentTime;
   }
+
+  _strokeToSymmetry(x0, y0, x1, y1, strokeId) {
+    const state = this.symmetryStates.get(strokeId);
+    const currentTime = performance.now();
+    const timeDelta = Math.max(1, currentTime - state.lastTime);
+    const distance = Math.hypot(x1 - x0, y1 - y0);
+    
+    // Calculate speed (pixels per millisecond)
+    const speed = distance / timeDelta;
+    
+    // Map speed to radius (faster = thinner, slower = thicker)
+    const targetRadius = this.calculateRadiusFromSpeed(speed);
+    
+    // Smooth radius transitions
+    state.currentRadius = this.lerp(state.currentRadius, targetRadius, 1 - this.smoothing);
+    
+    // Accumulate points for bezier smoothing
+    const newPoint = { x: x1, y: y1, r: state.currentRadius };
+    state.points.push(newPoint);
+
+    const n = state.points.length;
+    if (n === 2) {
+      // First segment: draw simple interpolated line between first two points
+      this._drawInterpolatedLine(state.points[0], state.points[1]);
+    } else if (n >= 3) {
+      // Draw a quadratic bezier between midpoints using the middle point as control
+      const p0 = state.points[n - 3];
+      const p1 = state.points[n - 2];
+      const p2 = state.points[n - 1];
+      this._drawBezierSegment(p0, p1, p2);
+    }
+    
+    // Update tracking variables in state
+    state.lastX = x1;
+    state.lastY = y1;
+    state.lastTime = currentTime;
+  }
   
-  endStroke() {
-    // Optionally finalize last segment; already handled incrementally
+  endStroke(strokeId = null) {
+    if (strokeId !== null && this.symmetryStates.has(strokeId)) {
+      // Clean up specific symmetry stroke
+      this.symmetryStates.delete(strokeId);
+      return;
+    }
+    
+    // Normal single stroke mode - clean up
     this.points = [];
+    this.symmetryStates.clear();
+    this.isSymmetryMode = false;
   }
   
   calculateRadiusFromSpeed(speed) {

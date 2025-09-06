@@ -49,8 +49,7 @@ export class RadialController {
 
     // Finalize on mouseup anywhere if opened via right click
     const onMouseUpOnce = (ev) => {
-      const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-      if (!focusActive) this.finalizeSelection(ev);
+      this.finalizeSelection(ev);
     };
     document.addEventListener('mouseup', onMouseUpOnce, { once: true });
   }

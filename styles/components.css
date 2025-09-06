@@ -97,9 +97,12 @@
   color: white;
   /* Add a white surrounding backdrop */
   box-shadow:
-    0 0 0 9px #e1e1e1a0, /* white surrounding 1st backdrop */
-    0 0 0 5px #e1e1e1c1, /* white surrounding 2nd backdrop */
-    0 10px 20px rgba(0, 0, 0, 0.2); /* original shadow */
+    0 0 0 9px #e1e1e1a0,
+    /* white surrounding 1st backdrop */
+    0 0 0 5px #e1e1e1c1,
+    /* white surrounding 2nd backdrop */
+    0 10px 20px rgba(0, 0, 0, 0.2);
+  /* original shadow */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -155,7 +158,7 @@
   box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px;
   transition: transform 0.2s ease;
   transform-origin: center;
-  
+
   /* Position around center using custom properties */
   transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1));
 
@@ -184,50 +187,365 @@
   transform: rotate(-32deg) translate(0px, -2px);
 }
 
-.settings-panel .form-group {
-  display: none;
-}
+.settings-bar {
+  position: fixed;
+  top: 25px;
 
-/* Focus controls around a hovered brush button */
-.settings-panel .brush-group .focus-circle {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: none;
+  width: 50vw;
+  padding: 0px;
+
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  box-shadow: rgba(0, 0, 0, 0.25) 0px 6px 20px;
-  transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1)) translate(var(--side), 0px);
-  z-index: 1201; /* above buttons */
-  cursor: grab;
-  touch-action: none; /* allow pointer drag without scrolling */
+
+  background: #ffffff;
+  border-radius: 50px;
+  box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px;
+
+  pointer-events: auto;
+  z-index: 1500;
+
+  transition: transform 0.2s ease;
 }
 
-.settings-panel .brush-group .focus-size .focus-size-inner {
+.settings-bar:hover {
+  transform: translateY(-3px);
+  box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 30px;
+}
+
+.left-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 10px;
+}
+
+.settings-bar .settings-bar-content {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toolbar-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+}
+
+.toolbar-left {
+  justify-content: flex-start;
+}
+
+.right-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 10px;
+  justify-content: flex-end;
+}
+
+.chip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 10px;
+  border: 0.5px solid rgba(128, 128, 128, 0.6);
+  border-radius: 999px;
+  background: #f7f7f7;
+  color: #222;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.chip-button:hover {
+  background: #ededed;
+}
+
+.chip-button:active {
+  transform: translateY(1px);
+}
+
+.chip-button svg {
+  display: block;
+  height: 100%;
+}
+
+/* Secondary buttons are revealed below primary, and remain visible when hovering container or themselves */
+.hover-reveal {
+  position: relative;
+}
+
+.chip-button.secondary {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  z-index: 10;
+  /* above siblings */
+  transform: translate(-50%, 0) scaleY(0.85);
+  transform-origin: top center;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.15s ease;
+  /* Fuse with primary */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top-width: 0;
+  /* margin-top: -1px; */
+}
+
+.hover-reveal {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Show only when long-press reveals */
+.hover-reveal.reveal .secondary {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 8px) scaleY(1);
+}
+
+.hover-reveal.closing .secondary {
+  /* Animate out symmetrically; keep visible until transition ends */
+  visibility: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 0) scaleY(0.85);
+}
+
+.hover-reveal.reveal {
+  pointer-events: auto;
+}
+
+/* Make primary look fused when revealed */
+.hover-reveal.reveal .chip-button:not(.secondary) {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.chip-circle {
   width: 22px;
   height: 22px;
+  
+  position: relative;
+  cursor: pointer;
+  
+  --ring-width: 2px;
+  border: 0;
   border-radius: 50%;
-  border: 1px solid rgba(200,200,200,0.8);
+}
+
+.chip-circle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    #ff0000,
+    #ff7f00,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #8b00ff,
+    #ff0000
+  );
+  /* Make a donut (ring) by masking the center */
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
+  mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
+  pointer-events: none;
+}
+
+/* Make left group toolbar buttons match the canvas selector size and be circular */
+.left-group .chip-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.left-group .chip-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Keep circular shape when revealing secondary button */
+.left-group .chip-button.secondary {
+  border-radius: 50%;
+  border-top-width: 0.5px;
+}
+
+.left-group .hover-reveal.reveal .chip-button:not(.secondary) {
+  border-bottom-left-radius: 50%;
+  border-bottom-right-radius: 50%;
+}
+
+.size-control input[type="number"],
+.symmetry-control input[type="number"] {
+  height: 28px;
+  width: 56px;
+  padding: 0 8px;
+
+  border-radius: 8px;
+
+  background: #fafafa;
+  color: #222;
+  border: 0.5px solid rgba(128, 128, 128, 0.6);
+
+  cursor: ew-resize;
+}
+
+.size-control input[type="number"]:focus,
+.symmetry-control input[type="number"]:focus {
+  outline: none;
+}
+
+.size-control input[type="number"]::-webkit-outer-spin-button,
+.size-control input[type="number"]::-webkit-inner-spin-button,
+.symmetry-control input[type="number"]::-webkit-outer-spin-button,
+.symmetry-control input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* Color Picker */
+.color-picker {
+  position: absolute;
+  width: 500px;
+  height: 400px;
+  background: #fff;
+  backdrop-filter: blur(10px);
+  border-radius: 30px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  padding: 12px;
+  z-index: 1600;
+}
+
+.color-picker .cp-inner {
+  display: grid;
+  grid-template-columns: 1fr 0.618fr;
+  gap: 12px;
+}
+
+.color-picker .cp-left {
+  min-height: 240px;
+  
+}
+
+.color-picker .cp-field {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.color-picker .cp-dot {
+  position: absolute;
+  border-radius: 50%;
+  border: 0;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: transform 0.1s ease;
+}
+
+.color-picker .cp-dot {
+  transition: width 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), height 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), transform 0.1s ease;
+}
+.color-picker .cp-dot:hover {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+.color-picker .cp-dot-selected {
+  outline: 0.5px solid #fff;
+  width: 15px !important;
+  height: 15px !important;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+.color-picker .cp-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.color-picker .cp-triangle {
+  height: 24px;
+  border-radius: 6px;
+}
+
+.color-picker .cp-slider-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.color-picker .cp-slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
   background: transparent;
 }
 
-.settings-panel .brush-group .focus-size:active { cursor: grabbing; }
-
-.settings-panel .brush-group .focus-size .focus-size-label {
-  position: absolute;
-  bottom: -18px;
-  font-size: 12px;
-  color: rgba(235,235,235,0.95);
+.color-picker .cp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #222;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-.settings-panel .brush-group .focus-color .focus-color-dot {
-  width: 22px;
-  height: 22px;
+.color-picker .cp-slider-marks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -6px;
+  padding: 0 2px;
+}
+
+.color-picker .cp-mark {
+  width: 2px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+.color-picker .cp-hex-wrap {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-picker .cp-hex-wrap input {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.color-picker .cp-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.color-picker .cp-swatch {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.85);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }

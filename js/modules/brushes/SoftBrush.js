@@ -6,7 +6,7 @@ export class SoftBrush extends BaseBrush {
     this.stampCanvas = document.createElement('canvas');
     this.cachedColor = null;
     this.cachedSize = 0;
-    this.spacingFactor = 0.32; // smaller = denser stamps, smoother result
+    this.spacingFactor = 0.25; // smaller = denser stamps, smoother result
   }
   
   rebuildStamp() {

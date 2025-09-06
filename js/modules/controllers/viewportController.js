@@ -5,6 +5,7 @@ export class ViewportController {
     this.canvas = canvas;
     this.scale = 1;
     this.fitScale = 1;
+    this.fitPadding = 0.8; // start a bit zoomed out relative to fit
     this.offsetX = 0;
     this.offsetY = 0;
 
@@ -36,7 +37,7 @@ export class ViewportController {
     const vh = rect.height;
     if (vw <= 0 || vh <= 0 || contentWidth <= 0 || contentHeight <= 0) return;
     this.fitScale = Math.min(vw / contentWidth, vh / contentHeight);
-    this.scale = this.fitScale;
+    this.scale = this.fitScale * this.fitPadding;
     this.offsetX = (vw - contentWidth * this.scale) / 2;
     this.offsetY = (vh - contentHeight * this.scale) / 2;
   }
@@ -62,7 +63,7 @@ export class ViewportController {
     }
 
     const userHadCustomZoom = Math.abs(prevScale - prevFit) > 1e-6;
-    this.scale = userHadCustomZoom ? prevScale : this.fitScale;
+    this.scale = userHadCustomZoom ? prevScale : this.fitScale * this.fitPadding;
 
     // Keep previous world center under the new screen center
     this.offsetX = rect.width / 2 - prevCenterWorld.x * this.scale;

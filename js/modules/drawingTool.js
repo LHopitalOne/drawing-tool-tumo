@@ -39,7 +39,7 @@ class DrawingTool {
     this._contentHasBakedBackground = true;
 
     // Symmetry
-    this.symmetryAxes = 0; // 0 = off; N>0 draws N rotated copies around center
+    this.symmetryAxes = 1; // 1 = single axis; N>1 draws N rotated copies around center
 
     // Active brush
     this.brushes = {};
@@ -82,8 +82,12 @@ class DrawingTool {
     this._lastPointerClientX = 0;
     this._lastPointerClientY = 0;
 
-    // Suppress next draw click after closing focus
-    this._suppressNextMouseDown = false;
+    // History stacks for undo/redo
+    this.history = [];
+    this.redoStack = [];
+    this.maxHistory = 50;
+
+    // Focus mode removed
 
     // Bind resize handler
     this.handleResize = this.handleResize.bind(this);
@@ -103,6 +107,31 @@ class DrawingTool {
       e.preventDefault();
       this.handleSetupSubmit();
     });
+
+    // Toggle inputs based on mode; in upload mode hide size/color and show import button
+    const modeRadios = form.querySelectorAll('input[name="mode"]');
+    const widthGroup = form.querySelector('label[for="canvasWidth"]').parentElement;
+    const heightGroup = form.querySelector('label[for="canvasHeight"]').parentElement;
+    const colorGroup = form.querySelector('label[for="backgroundColor"]').parentElement;
+    const importActionGroup = document.getElementById('importActionGroup');
+    const submitBtn = document.getElementById('setupSubmitBtn');
+    const fileInput = document.getElementById('fileInput');
+    const importBtn = document.getElementById('importFromSetupBtn');
+    const applyVisibility = () => {
+      const mode = form.querySelector('input[name="mode"]:checked').value;
+      const isUpload = mode === 'upload';
+      widthGroup.style.display = isUpload ? 'none' : '';
+      heightGroup.style.display = isUpload ? 'none' : '';
+      colorGroup.style.display = isUpload ? 'none' : '';
+      importActionGroup.style.display = isUpload ? '' : 'none';
+      submitBtn.style.display = isUpload ? 'none' : '';
+    };
+    modeRadios.forEach(r => r.addEventListener('change', applyVisibility));
+    applyVisibility();
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    }
   }
 
   showError(message) {
@@ -172,6 +201,8 @@ class DrawingTool {
     this.viewport.resizeBackingStore();
     this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Seed initial history state
+    this._pushHistorySnapshot();
   }
 
   initForUpload() {
@@ -187,6 +218,8 @@ class DrawingTool {
     this.viewport.resizeBackingStore();
     this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Seed initial history state
+    this._pushHistorySnapshot();
   }
 
   initializeBrushes() {
@@ -228,12 +261,13 @@ class DrawingTool {
     document.addEventListener('keyup', this.handleKeyUp.bind(this));
 
     // Controls
-    document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
-    document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
-    const uploadBtn = document.getElementById('uploadBtn');
+    document.getElementById('clearBtn') && document.getElementById('clearBtn').addEventListener('click', this.clearCanvas.bind(this));
+    document.getElementById('saveBtn') && document.getElementById('saveBtn').addEventListener('click', this.saveImage.bind(this));
     const fileInput = document.getElementById('fileInput');
-    uploadBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    if (fileInput) {
+      // File input is wired from setup modal now; keep listener
+      fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+    }
 
     // Resize viewport when window resizes
     window.addEventListener('resize', this.handleResize);
@@ -252,18 +286,7 @@ class DrawingTool {
       if (!this.isDrawing && !this.radial.isOpen()) this.render();
     });
 
-    // Listen to size changes from radial focus UI
-    document.addEventListener('brush:size-change', (e) => {
-      const current = this.getBrushSettings(this.activeBrushKey);
-      const fallback = current ? current.size : 10;
-      const val = Math.max(1, Math.min(400, e.detail && e.detail.size ? e.detail.size : fallback));
-      this.brushSettings[this.activeBrushKey] = { ...current, size: val };
-      this.getActiveBrush().setSize(val);
-      // Sync size input if present
-      const sizeInputEl = document.getElementById('brushSizeInput');
-      if (sizeInputEl) sizeInputEl.value = String(val);
-      this.render();
-    });
+    // Focus size-change event removed.
 
     // Select brush from radial focus UI
     document.addEventListener('brush:select', (e) => {
@@ -273,21 +296,9 @@ class DrawingTool {
       if (window.brushRing && window.brushRing.setButtonVisuals) window.brushRing.setButtonVisuals(this.activeBrushKey);
     });
 
-    // Reset pointer states when focus exits
-    document.addEventListener('brush:focus-exit', () => {
-      this.resetPointerStates();
-      this.render();
-    });
+    // Focus exit removed.
 
-    // Clicking canvas exits focus mode if any
-    this.viewportCanvas.addEventListener('mousedown', (ev) => {
-      const focusActiveNow = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-      if (focusActiveNow) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
-      }
-    });
+    // Focus click-to-exit removed.
 
     // Floating settings UI
     const fabToggle = document.getElementById('fabToggle');
@@ -319,10 +330,7 @@ class DrawingTool {
         };
         const activeBrush = this.getActiveBrush();
         if (activeBrush.setColor) activeBrush.setColor(newColor);
-        // Update focus color dot if open
-        if (window.brushRing && window.brushRing.updateFocusColor) {
-          window.brushRing.updateFocusColor(newColor);
-        }
+        // Focus color sync removed
       });
     }
     if (sizeInput) {
@@ -420,20 +428,7 @@ class DrawingTool {
   // Pinch/zoom handled by ViewportController
 
   startDrawing(e) {
-    // Block drawing while focus mode is active; close focus instead
-    const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-    if (focusActive) {
-      e.preventDefault();
-      if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
-      // Only consume this event; do not suppress future clicks
-      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-      return;
-    }
-    if (this._suppressNextMouseDown) {
-      this._suppressNextMouseDown = false;
-      e.preventDefault();
-      return;
-    }
+    // Focus mode removed
     // Right-click opens radial selection and suspends drawing
     if (e && e.button === 2) {
       this.radial.openAt(e.clientX, e.clientY, { via: 'mouse' });
@@ -460,10 +455,7 @@ class DrawingTool {
   }
 
   draw(e) {
-    // Do nothing while focus mode is active
-    if (window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive()) {
-      return;
-    }
+    // Focus mode removed
     // While radial is open, update hover selection and skip drawing
     if (this.radial.isOpen()) {
       const clientX = e.clientX;
@@ -496,14 +488,7 @@ class DrawingTool {
 
   handleTouch(e) {
     e.preventDefault();
-    // Block drawing while focus mode is active; close focus instead
-    const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-    if (focusActive) {
-      if (e.type === 'touchstart') {
-        if (window.brushRing && window.brushRing.exitFocus) window.brushRing.exitFocus();
-      }
-      return;
-    }
+    // Focus mode removed
     const pos = this.getTouchPos(e);
     if (e.type === 'touchstart') {
       // Record touch start for gesture detection
@@ -596,10 +581,7 @@ class DrawingTool {
       this.dragStartY = 0;
       if (this.longPressTimeoutId) { clearTimeout(this.longPressTimeoutId); this.longPressTimeoutId = null; }
       if (this.radial.isOpen() && this.radial.isLongPressSelecting()) {
-        const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-        if (!focusActive) {
-          this.radial.finalizeSelection();
-        }
+        this.radial.finalizeSelection();
         return;
       }
     }
@@ -609,8 +591,7 @@ class DrawingTool {
     // If radial menu is open, only finalize on release, ignore mouseout
     if (this.radial.isOpen()) {
       const type = e && e.type;
-      const focusActive = !!(window.brushRing && window.brushRing.isFocusActive && window.brushRing.isFocusActive());
-      if (!focusActive && (type === 'mouseup' || type === 'touchend' || type === 'touchcancel')) {
+      if (type === 'mouseup' || type === 'touchend' || type === 'touchcancel') {
         this.radial.finalizeSelection(e);
       }
       return;
@@ -625,7 +606,9 @@ class DrawingTool {
 
     this.isDrawing = false;
     const brush = this.getActiveBrush();
-    if (brush.endStroke) brush.endStroke();
+    if (brush.endStroke) this._symmetryEndStroke();
+    // Snapshot after finishing a stroke
+    this._pushHistorySnapshot();
   }
 
   // --- Radial settings helpers moved to controllers/RadialController ---
@@ -634,6 +617,8 @@ class DrawingTool {
     // Clear drawing content to transparent; background is drawn during render
     this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     this.render();
+    // Push history so clear is undoable
+    this._pushHistorySnapshot();
   }
 
   changeBackgroundColor(color) {
@@ -707,6 +692,71 @@ class DrawingTool {
         } catch (_) {}
       }
     })();
+  }
+
+  // --- Undo/Redo stubs ---
+  undo() {
+    // Need at least two states: current and a previous one
+    if (this.history.length <= 1) return;
+    // Pop current and move it to redo
+    const current = this.history.pop();
+    this.redoStack.push(current);
+    // Apply new top (previous state)
+    const prev = this.history[this.history.length - 1];
+    this._applySnapshot(prev);
+    this.render();
+  }
+  redo() {
+    if (this.redoStack.length === 0) return;
+    const next = this.redoStack.pop();
+    // Apply and push as new current
+    this._applySnapshot(next);
+    this.history.push(next);
+    this.render();
+  }
+
+  _captureSnapshot() {
+    // Snapshot only content pixels (alpha preserved). Store as ImageData for speed/memory
+    try {
+      return this.contentCtx.getImageData(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    } catch (_) {
+      // Fallback to offscreen canvas if tainted or other issues
+      const c = document.createElement('canvas');
+      c.width = this.contentCanvas.width;
+      c.height = this.contentCanvas.height;
+      c.getContext('2d').drawImage(this.contentCanvas, 0, 0);
+      return c;
+    }
+  }
+
+  _applySnapshot(snap) {
+    if (!snap) return;
+    if (snap instanceof ImageData) {
+      this.contentCtx.putImageData(snap, 0, 0);
+    } else if (snap instanceof HTMLCanvasElement) {
+      this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+      this.contentCtx.drawImage(snap, 0, 0);
+    }
+  }
+
+  _pushHistorySnapshot() {
+    const snap = this._captureSnapshot();
+    const last = this.history[this.history.length - 1];
+    // Deduplicate identical sizes and content by comparing dimensions and a small sample
+    if (last && last.width === snap.width && last.height === snap.height) {
+      try {
+        const a = last.data, b = snap.data;
+        let same = true;
+        for (let i = 0; i < a.length; i += Math.max(16, (a.length / 1024) | 0)) {
+          if (a[i] !== b[i] || a[i+1] !== b[i+1] || a[i+2] !== b[i+2] || a[i+3] !== b[i+3]) { same = false; break; }
+        }
+        if (same) return; // skip pushing identical snapshot
+      } catch (_) {}
+    }
+    // Clear redo on new distinct action
+    this.redoStack.length = 0;
+    this.history.push(snap);
+    if (this.history.length > this.maxHistory) this.history.shift();
   }
 
   async handleFileUpload(e) {
@@ -787,6 +837,12 @@ class DrawingTool {
     symmetry.stroke(brush, x0, y0, x1, y1, axes, cx, cy);
   }
 
+  _symmetryEndStroke() {
+    const brush = this.getActiveBrush();
+    const axes = this.symmetryAxes | 0;
+    symmetry.endStroke(brush, axes);
+  }
+
   _renderBrushPreview(ctx, dpr) {
     const brush = this.getActiveBrush();
     const radius = Math.max(1, (brush.getPreviewRadius ? brush.getPreviewRadius() : this.brushRadius));
@@ -818,8 +874,7 @@ class DrawingTool {
     if (b.setColor) b.setColor(s.color || '#ffffff');
     // Update hover preview immediately
     this.render();
-    // Update focus color dot
-    if (window.brushRing && window.brushRing.updateFocusColor) window.brushRing.updateFocusColor(s.color || '#ffffff');
+    // Focus color sync removed
   }
 
   setActiveBrushByKey(key) {

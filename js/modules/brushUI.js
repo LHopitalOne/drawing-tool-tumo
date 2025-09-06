@@ -129,6 +129,13 @@ export function initBrushRing(config = {}) {
     ...next,
   });
   window.brushRing.setButtonVisuals = (activeKey, hoverEl) => {
+    // If radial just opened and hover is being awaited, do not show any hover visuals
+    try {
+      const rc = (window.drawingTool && window.drawingTool.radial) || null;
+      if (rc && rc._awaitFirstMove) {
+        hoverEl = null;
+      }
+    } catch (_) {}
     const updateNodeIcon = (node, forceSelected) => {
       if (!node) return;
       const key = node.getAttribute('data-brush');
@@ -272,7 +279,7 @@ function initTopBar() {
       if (bgInput && bgIndicator) bgIndicator.style.background = bgInput.value;
       const dt = window.drawingTool;
       if (dt) {
-        const s = dt.getBrushSettings(dt.activeBrushKey);
+        const s = dt.getBrushSettings();
         if (brushColorIndicator) brushColorIndicator.style.background = s.color || '#ffffff';
         if (sizeInput) sizeInput.value = String(s.size || 10);
         if (symmetryInput) symmetryInput.value = String(dt.symmetryAxes || 1);
@@ -325,15 +332,13 @@ function initTopBar() {
         brushColorIndicator,
         () => {
           if (!dt) return '#ffffff';
-          const s = dt.getBrushSettings(dt.activeBrushKey);
+          const s = dt.getBrushSettings();
           return s.color || '#ffffff';
         },
         (hex) => {
           if (!dt) return;
-          const key = dt.activeBrushKey;
-          dt.brushSettings[key] = { ...dt.getBrushSettings(key), color: hex };
-          const b = dt.getActiveBrush();
-          if (b.setColor) b.setColor(hex);
+          dt.brushColor = hex;
+          Object.values(dt.brushes).forEach((b) => { if (b.setColor) b.setColor(hex); });
           brushColorIndicator.style.background = hex;
           dt.render();
         }
@@ -427,6 +432,8 @@ function initTopBar() {
       if (!dt) return;
       const val = Math.max(1, Math.min(64, parseInt(e.target.value || '1', 10)));
       dt.symmetryAxes = val | 0;
+      // Re-render immediately so axis guides update in real time
+      try { dt.render(); } catch (_) {}
     });
 
     // Drag horizontally to change symmetry value

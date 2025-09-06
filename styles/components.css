@@ -126,6 +126,9 @@
   aspect-ratio: 1;
   max-width: calc(100vw - 48px);
   z-index: 1200;
+  /* Animations for quick in/out */
+  will-change: transform, opacity, filter;
+  transition: opacity 0.14s ease-out, filter 0.14s ease-out, transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .settings-panel .settings-body {
@@ -142,6 +145,62 @@
   display: block; */
 }
 
+/* --- Radial open/close animations --- */
+/* Initial entering state: slightly scaled down, blurred and transparent */
+.settings-panel.radial-enter {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
+/* Open state: fully visible and crisp; also emits a quick ripple */
+.settings-panel.radial-open {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Exit state: fade + blur + slight shrink */
+.settings-panel.radial-exit {
+  opacity: 0;
+  filter: blur(10px);
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+/* Ripple burst from the center */
+.settings-panel::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 40%, rgba(255,255,255,0.0) 70%);
+  filter: blur(10px);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@keyframes radialRippleIn {
+  0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 0.5; filter: blur(16px); }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0;   filter: blur(20px); }
+}
+
+@keyframes radialRippleOut {
+  0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.35; filter: blur(14px); }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0;    filter: blur(20px); }
+}
+
+.settings-panel.radial-open::after {
+  animation: radialRippleIn 0.18s ease-out both;
+}
+
+.settings-panel.radial-exit::after {
+  animation: radialRippleOut 0.16s ease-out both;
+}
+
 .settings-panel .brush-group .brush-btn {
   display: block;
   position: absolute;
@@ -156,13 +215,21 @@
   justify-content: center;
 
   box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 20px;
-  transition: transform 0.2s ease;
+  transition: transform 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), opacity 0.12s ease, filter 0.12s ease;
   transform-origin: center;
 
   /* Position around center using custom properties */
   transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1));
 
   z-index: 1000;
+}
+
+/* During enter/exit, pull buttons back to center with blur and fade */
+.settings-panel.radial-enter .brush-group .brush-btn,
+.settings-panel.radial-exit .brush-group .brush-btn {
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(0px) rotate(calc(var(--angle) * -1)) scale(0.9);
+  filter: blur(6px);
+  opacity: 0;
 }
 
 .settings-panel .brush-group .brush-btn:hover {
@@ -174,6 +241,11 @@
   width: 60%;
   height: 60%;
   pointer-events: none;
+}
+
+/* Disable hover scale while no-hover state active (during initial open) */
+.settings-panel.no-hover .brush-group .brush-btn:hover {
+  transform: translate(-50%, -50%) rotate(var(--angle)) translate(var(--distance)) rotate(calc(var(--angle) * -1));
 }
 
 .settings-panel .brush-group .brush-btn[data-brush="soft"] embed,
@@ -205,12 +277,24 @@
   pointer-events: auto;
   z-index: 1500;
 
-  transition: transform 0.2s ease;
+  transform-origin: center center;
+  will-change: transform;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .settings-bar:hover {
   transform: translateY(-3px);
   box-shadow: rgba(0, 0, 0, 0.5) 0px 0px 30px;
+}
+
+/* Entrance animation states for the top settings bar */
+.settings-bar.settings-enter {
+  transform: scaleX(0.5);
+}
+
+.settings-bar.content-hidden .settings-bar-content {
+  opacity: 0;
+  filter: blur(10px);
 }
 
 .left-group {
@@ -225,6 +309,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  will-change: opacity, filter;
+  transition: opacity 0.16s ease-out, filter 0.16s ease-out;
 }
 
 .toolbar-chip {
@@ -333,10 +419,10 @@
 .chip-circle {
   width: 22px;
   height: 22px;
-  
+
   position: relative;
   cursor: pointer;
-  
+
   --ring-width: 2px;
   border: 0;
   border-radius: 50%;
@@ -347,17 +433,15 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    #ff0000,
-    #ff7f00,
-    #ffff00,
-    #00ff00,
-    #00ffff,
-    #0000ff,
-    #8b00ff,
-    #ff0000
-  );
+  background: conic-gradient(from 0deg,
+      #ff0000,
+      #ff7f00,
+      #ffff00,
+      #00ff00,
+      #00ffff,
+      #0000ff,
+      #8b00ff,
+      #ff0000);
   /* Make a donut (ring) by masking the center */
   -webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
   mask: radial-gradient(closest-side, transparent calc(100% - var(--ring-width, 2px)), #fff calc(100% - var(--ring-width, 2px)));
@@ -418,26 +502,109 @@
 
 /* Color Picker */
 .color-picker {
-  position: absolute;
   width: 500px;
-  height: 400px;
-  background: #fff;
+  position: fixed;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.37);
   backdrop-filter: blur(10px);
   border-radius: 30px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
   padding: 12px;
   z-index: 1600;
+  display: flex;
+  flex-direction: column;
+  will-change: opacity, transform, filter;
+  transition: opacity 0.16s ease-out, filter 0.16s ease-out, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.color-picker.cp-desktop {
+  width: fit-content;
+  height: fit-content;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.color-picker.cp-mobile {
+  width: 94vw;
+  height: 82vh;
+  left: 3vw !important;
+  top: 9vh !important;
+  border-radius: 22px;
+}
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1599;
+  will-change: opacity;
+  transition: opacity 0.16s ease-out;
+}
+
+/* Color picker enter/exit states */
+.color-picker.cp-enter {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(12px) scale(0.98);
+}
+.color-picker.cp-open {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0) scale(1);
+}
+.color-picker.cp-exit {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(10px) scale(0.98);
+  pointer-events: none;
+}
+
+.cp-overlay.cp-enter { opacity: 0; }
+.cp-overlay.cp-open { opacity: 1; }
+.cp-overlay.cp-exit { opacity: 0; pointer-events: none; }
+
+.color-picker .cp-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+.cp-desktop .cp-header {
+  cursor: grab;
+}
+
+.cp-desktop .cp-header.dragging {
+  cursor: grabbing;
+}
+
+.color-picker .cp-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 300;
+  z-index: 10;
+}
+
+.color-picker .cp-close:active {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .color-picker .cp-inner {
   display: grid;
-  grid-template-columns: 1fr 0.618fr;
-  gap: 12px;
+  grid-template-rows: auto auto; /* shrink-wrap both rows */
+  gap: 8px;
+  align-items: start;
 }
 
-.color-picker .cp-left {
-  min-height: 240px;
-  
+.color-picker .cp-top {
+  aspect-ratio: 1 / 1;
+  width: clamp(260px, 42vw, 560px);
+  transform: translateY(-20px);
 }
 
 .color-picker .cp-field {
@@ -450,36 +617,49 @@
 .color-picker .cp-dot {
   position: absolute;
   border-radius: 50%;
-  border: 0;
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
   transform: translate(-50%, -50%);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-  transition: transform 0.1s ease;
+  transition: transform 0.6s cubic-bezier(0, 0, 0.2, 1);
 }
 
 .color-picker .cp-dot {
-  transition: width 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), height 0.18s cubic-bezier(0.4, 0.2, 0.2, 1), transform 0.1s ease;
+  transition: width 0.1s cubic-bezier(0, 0, 0.2, 1), height 0.1s cubic-bezier(0, 0, 0.2, 1), transform 0.6s cubic-bezier(0, 0, 0.2, 1);
 }
+
+/* Subtle overall rotation for the phyllotaxis field during open/close */
+.color-picker .cp-field {
+  will-change: transform;
+  transform-origin: center center;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 .color-picker .cp-dot:hover {
-  width: 15px !important;
-  height: 15px !important;
+  width: 25px !important;
+  height: 25px !important;
 }
 
 .color-picker .cp-dot-selected {
   outline: 0.5px solid #fff;
-  width: 15px !important;
-  height: 15px !important;
+  width: 25px !important;
+  height: 25px !important;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
 }
 
-.color-picker .cp-right {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.color-picker .cp-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  gap: 20px 12px;
+  align-items: start;
+  height: fit-content;
+  padding: 5px;
 }
 
 .color-picker .cp-triangle {
   height: 24px;
-  border-radius: 6px;
+  position: relative;
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
 }
 
 .color-picker .cp-slider-wrap {
@@ -496,6 +676,31 @@
   background: transparent;
 }
 
+/* Custom slider overlay */
+.color-picker .cp-slider-rail {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 24px; /* match triangle for easier hit */
+  cursor: pointer;
+  z-index: 1; /* below handle, above triangle */
+}
+.color-picker .cp-slider-handle {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  cursor: pointer;
+  z-index: 2;
+}
+
 .color-picker .cp-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;
@@ -507,17 +712,26 @@
 }
 
 .color-picker .cp-slider-marks {
-  display: flex;
-  justify-content: space-between;
-  margin-top: -6px;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  transform: translateY(-50%);
+  height: 24px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
   padding: 0 2px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .color-picker .cp-mark {
   width: 2px;
-  height: 6px;
-  background: rgba(0, 0, 0, 0.35);
+  height: 2px;
+  background: rgba(128, 128, 128, 0.6);
   border-radius: 2px;
+  justify-self: center;
 }
 
 .color-picker .cp-hex-wrap {
@@ -525,6 +739,7 @@
   grid-template-columns: 14px 1fr;
   align-items: center;
   gap: 6px;
+  grid-column: 1 / -1; /* span both columns */
 }
 
 .color-picker .cp-hex-wrap input {
@@ -532,14 +747,16 @@
   border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.2);
   padding: 0 8px;
+  text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .color-picker .cp-swatches {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(10, 1fr);
   gap: 8px;
-  margin-top: 4px;
+  grid-column: 1 / -1; /* span both columns */
+  justify-items: center;
 }
 
 .color-picker .cp-swatch {

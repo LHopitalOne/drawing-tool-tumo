@@ -172,6 +172,17 @@ class DrawingTool {
 
     document.getElementById('setupModal').style.display = 'none';
     document.body.classList.remove('modal-open');
+    // Animate settings bar emerging after setup closes
+    try {
+      const bar = document.querySelector('.settings-bar');
+      if (bar) {
+        bar.classList.add('settings-enter', 'content-hidden');
+        requestAnimationFrame(() => {
+          bar.classList.remove('settings-enter');
+          setTimeout(() => { bar.classList.remove('content-hidden'); }, 140);
+        });
+      }
+    } catch (_) {}
 
     if (mode === 'draw') {
       this.init();
@@ -232,11 +243,10 @@ class DrawingTool {
       pencil: new PencilBrush(this.contentCtx),
       eraser: new EraserBrush(this.contentCtx, () => document.getElementById('backgroundColor').value),
     };
-    // Sync base properties
-    Object.entries(this.brushes).forEach(([key, b]) => {
-      const s = this.brushSettings[key] || { size: this.brushRadius, color: this.brushColor };
-      b.setSize(s.size);
-      if (b.setColor) b.setColor(s.color);
+    // Sync base properties (use universal size/color)
+    Object.values(this.brushes).forEach((b) => {
+      b.setSize(this.brushRadius);
+      if (b.setColor) b.setColor(this.brushColor);
     });
   }
 
@@ -319,31 +329,23 @@ class DrawingTool {
     }
 
     if (colorInput) {
-      // Initialize color input with active brush color
-      colorInput.value = this.getBrushSettings(this.activeBrushKey).color;
+      // Initialize color input with universal color
+      colorInput.value = this.brushColor;
       colorInput.addEventListener('input', (e) => {
         const newColor = e.target.value || '#ffffff';
-        // Update only active brush color
-        this.brushSettings[this.activeBrushKey] = {
-          ...this.getBrushSettings(this.activeBrushKey),
-          color: newColor,
-        };
-        const activeBrush = this.getActiveBrush();
-        if (activeBrush.setColor) activeBrush.setColor(newColor);
-        // Focus color sync removed
+        // Set universal color
+        this.brushColor = newColor;
+        // Apply to all brushes
+        Object.values(this.brushes).forEach((b) => { if (b.setColor) b.setColor(newColor); });
+        this.render();
       });
     }
     if (sizeInput) {
-      sizeInput.value = String(this.getBrushSettings(this.activeBrushKey).size);
+      sizeInput.value = String(this.brushRadius);
       sizeInput.addEventListener('input', (e) => {
         const val = Math.max(1, Math.min(400, parseInt(e.target.value || '1', 10)));
-        // Update only active brush size
-        this.brushSettings[this.activeBrushKey] = {
-          ...this.getBrushSettings(this.activeBrushKey),
-          size: val,
-        };
-        const activeBrush = this.getActiveBrush();
-        activeBrush.setSize(val);
+        this.brushRadius = val;
+        Object.values(this.brushes).forEach((b) => b.setSize(val));
         this.render();
       });
     }
@@ -401,6 +403,32 @@ class DrawingTool {
   }
 
   handleKeyDown(e) {
+    // Ignore shortcuts while typing in inputs or contenteditable areas
+    const active = document.activeElement;
+    const tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+    const isTextField = tag === 'input' || tag === 'textarea' || (active && active.isContentEditable);
+
+    // Global app shortcuts
+    const isModifier = (e.ctrlKey || e.metaKey) && !isTextField;
+    if (isModifier) {
+      const key = (e.key || '').toLowerCase();
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) this.redo(); else this.undo();
+        return;
+      }
+      if (key === 'y') {
+        e.preventDefault();
+        this.redo();
+        return;
+      }
+      if (key === 's') {
+        e.preventDefault();
+        this.saveImage();
+        return;
+      }
+    }
+
     if (e.code === 'Space' && !this.isSpacePressed) {
       e.preventDefault();
       this.isSpacePressed = true;
@@ -812,6 +840,9 @@ class DrawingTool {
     ctx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     ctx.drawImage(this.contentCanvas, 0, 0);
 
+    // Draw symmetry axes guide when enabled
+    this._renderSymmetryAxes(ctx, dpr);
+
     // Draw desktop brush hover preview on top of content (only when not drawing and pointer is in canvas)
     if (!this.isDrawing && this._isPointerInCanvas) {
       this._renderBrushPreview(ctx, dpr);
@@ -859,19 +890,52 @@ class DrawingTool {
     );
   }
 
-  getBrushSettings(key) {
-    return this.brushSettings[key] || { size: this.brushRadius, color: this.brushColor };
+  _renderSymmetryAxes(ctx, dpr) {
+    const axes = this.symmetryAxes | 0;
+    if (!axes || axes <= 1) return;
+    const w = this.contentCanvas.width;
+    const h = this.contentCanvas.height;
+    if (w <= 0 || h <= 0) return;
+    const cx = w / 2;
+    const cy = h / 2;
+    const halfDiag = Math.hypot(w, h) * 0.5 + 2;
+
+    ctx.save();
+    // Make line width ~0.5px in screen space
+    const scale = (this.viewport && this.viewport.scale) ? this.viewport.scale : 1;
+    const screenPx = Math.max(0.25, 0.5 / (scale * dpr));
+    ctx.lineWidth = screenPx;
+    ctx.strokeStyle = '#ffffff';
+    ctx.globalAlpha = 0.6;
+    // Draw exactly `axes` rays separated by 2π/N, from center outward (N sectors)
+    ctx.beginPath();
+    for (let i = 0; i < axes; i++) {
+      const angle = (i * Math.PI * 2) / axes;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + dx * halfDiag, cy + dy * halfDiag);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  getBrushSettings() {
+    // Universal settings for all brushes
+    return { size: this.brushRadius, color: this.brushColor };
   }
 
   _applyActiveBrushSettingsToUIAndBrush() {
-    const s = this.getBrushSettings(this.activeBrushKey);
+    const s = this.getBrushSettings();
     const colorInput = document.getElementById('brushColorInput');
     const sizeInput = document.getElementById('brushSizeInput');
     if (colorInput) colorInput.value = s.color || '#ffffff';
     if (sizeInput) sizeInput.value = String(s.size || 10);
-    const b = this.getActiveBrush();
-    b.setSize(s.size || 10);
-    if (b.setColor) b.setColor(s.color || '#ffffff');
+    // Apply universal settings to all brushes
+    Object.values(this.brushes).forEach((b) => {
+      b.setSize(s.size || 10);
+      if (b.setColor) b.setColor(s.color || '#ffffff');
+    });
     // Update hover preview immediately
     this.render();
     // Focus color sync removed

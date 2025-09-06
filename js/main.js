@@ -1,4 +1,4 @@
-import './modules/brushUI.js';
+import './modules/ui/brushUI.js';
 import App from './modules/App.js';
 
 document.addEventListener('DOMContentLoaded', async () => {

@@ -1,5 +1,4 @@
-import { hexToRgb } from './utils.js';
-import { rgbToHex, hsvToRgb, rgbToHsv, clamp } from './utils.js';
+import { hexToRgb, rgbToHex, hsvToRgb, rgbToHsv, clamp } from '../utils.js';
 
 export class ColorPickerModal {
   constructor(options) {

@@ -514,3 +514,5 @@ function initTopBar() {
   if (undoBtn) undoBtn.addEventListener('click', () => { if (window.drawingTool && window.drawingTool.undo) window.drawingTool.undo(); });
   if (redoBtn) redoBtn.addEventListener('click', () => { if (window.drawingTool && window.drawingTool.redo) window.drawingTool.redo(); });
 }
+
+

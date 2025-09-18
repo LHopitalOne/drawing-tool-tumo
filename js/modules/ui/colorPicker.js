@@ -166,19 +166,22 @@ export class ColorPickerModal {
     if (isMobile) {
       this.nodes.overlay.style.display = 'block';
       this.nodes.wrap.classList.add('cp-mobile');
-      // Centered by CSS left/top in class
     } else {
       this.nodes.wrap.classList.add('cp-desktop');
-      const rect = this.anchorEl.getBoundingClientRect();
-      const pad = 8;
-      const top = rect.bottom + pad + window.scrollY;
-      let left = rect.left + window.scrollX;
-      const w = this.nodes.wrap.getBoundingClientRect().width || 500;
-      if (left + w > window.scrollX + window.innerWidth - 8) left = window.scrollX + window.innerWidth - 8 - w;
-      if (left < 8) left = 8;
-      this.nodes.wrap.style.top = `${top}px`;
-      this.nodes.wrap.style.left = `${left}px`;
     }
+
+    // Compute centered position in viewport (account for scroll)
+    try {
+      // Force layout to get accurate size
+      const rect = this.nodes.wrap.getBoundingClientRect();
+      const w = rect.width || 500;
+      const h = rect.height || 400;
+      const left = Math.max(8, Math.round(window.scrollX + (window.innerWidth - w) / 2));
+      const top = Math.max(8, Math.round(window.scrollY + (window.innerHeight - h) / 2));
+      // Use !important in case mobile class sets left/top with !important
+      this.nodes.wrap.style.setProperty('left', `${left}px`, 'important');
+      this.nodes.wrap.style.setProperty('top', `${top}px`, 'important');
+    } catch (_) {}
   }
 
   _renderPhyllotaxis() {
@@ -350,6 +353,11 @@ export class ColorPickerModal {
     setTimeout(() => document.addEventListener('mousedown', onPointerDownOutside), 0);
     document.addEventListener('keydown', (this._escHandler = (e) => { if (e.key === 'Escape') this.destroy(); }));
 
+    // Keep centered on window resize
+    window.addEventListener('resize', (this._resizeHandler = () => {
+      try { this._layout(); } catch (_) {}
+    }));
+
     this.nodes.field.addEventListener('click', (e) => {
       const dot = e.target.closest('.cp-dot');
       if (!dot) return;
@@ -426,6 +434,7 @@ export class ColorPickerModal {
   destroy() {
     document.removeEventListener('mousedown', this._outsideHandler);
     document.removeEventListener('keydown', this._escHandler);
+    if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     if (this._dragMove) window.removeEventListener('mousemove', this._dragMove);
     if (this._dragUp) window.removeEventListener('mouseup', this._dragUp);
 

@@ -314,8 +314,7 @@ class DrawingTool {
     const fabToggle = document.getElementById('fabToggle');
     const settingsPanel = document.getElementById('settingsPanel');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-    const colorInput = document.getElementById('brushColorInput');
-    const sizeInput = document.getElementById('brushSizeInput');
+    const sizeInput = document.getElementById('topBrushSize');
     const symmetryAxesInput = document.getElementById('symmetryAxesInput');
     const fitBtn = document.getElementById('fitViewBtn');
     const brushGroupEl = document.querySelector('.brush-group');
@@ -325,19 +324,6 @@ class DrawingTool {
       closeSettingsBtn.addEventListener('click', () => {
         settingsPanel.setAttribute('hidden', '');
         fabToggle.setAttribute('aria-expanded', 'false');
-      });
-    }
-
-    if (colorInput) {
-      // Initialize color input with universal color
-      colorInput.value = this.brushColor;
-      colorInput.addEventListener('input', (e) => {
-        const newColor = e.target.value || '#ffffff';
-        // Set universal color
-        this.brushColor = newColor;
-        // Apply to all brushes
-        Object.values(this.brushes).forEach((b) => { if (b.setColor) b.setColor(newColor); });
-        this.render();
       });
     }
     if (sizeInput) {
@@ -927,9 +913,7 @@ class DrawingTool {
 
   _applyActiveBrushSettingsToUIAndBrush() {
     const s = this.getBrushSettings();
-    const colorInput = document.getElementById('brushColorInput');
-    const sizeInput = document.getElementById('brushSizeInput');
-    if (colorInput) colorInput.value = s.color || '#ffffff';
+    const sizeInput = document.getElementById('topBrushSize');
     if (sizeInput) sizeInput.value = String(s.size || 10);
     // Apply universal settings to all brushes
     Object.values(this.brushes).forEach((b) => {

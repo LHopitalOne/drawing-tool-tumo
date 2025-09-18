@@ -439,9 +439,23 @@ class DrawingTool {
     return this.viewport.worldFromClient(t.clientX, t.clientY);
   }
 
+  // Returns true when the color picker modal is currently open
+  isColorPickerOpen() {
+    try {
+      return Boolean(document.querySelector('.color-picker.cp-open'));
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Pinch/zoom handled by ViewportController
 
   startDrawing(e) {
+    // If color picker is open, ignore canvas clicks so it can close without drawing
+    if (this.isColorPickerOpen()) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      return;
+    }
     // Focus mode removed
     // Right-click opens radial selection and suspends drawing
     if (e && e.button === 2) {
@@ -469,6 +483,10 @@ class DrawingTool {
   }
 
   draw(e) {
+    // Ignore drawing while color picker is open
+    if (this.isColorPickerOpen()) {
+      return;
+    }
     // Focus mode removed
     // While radial is open, update hover selection and skip drawing
     if (this.radial.isOpen()) {
@@ -501,6 +519,11 @@ class DrawingTool {
   // Legacy helpers replaced by brush system
 
   handleTouch(e) {
+    // Ignore touch interactions while color picker is open
+    if (this.isColorPickerOpen()) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     // Focus mode removed
     const pos = this.getTouchPos(e);

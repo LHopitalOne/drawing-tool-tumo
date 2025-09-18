@@ -1,0 +1,203 @@
+/* Mobile Coming Soon overlay */
+.mobile-coming-soon-open .container,
+.mobile-coming-soon-open .settings-bar,
+.mobile-coming-soon-open #setupModal,
+.mobile-coming-soon-open #errorModal {
+    display: none !important;
+}
+
+.mobile-coming-soon {
+    /* Customizable variables */
+    --phyllo-width: 160vw;
+    --phyllo-height: 160vw;
+    --phyllo-dot-min-size: 0px;
+    --phyllo-dot-max-size: 20vh;
+    
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: #0b0b0b;
+    color: #fff;
+    display: grid;
+    place-items: center;
+}
+
+.mobile-coming-soon__content {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    overflow: hidden;
+}
+
+.mobile-coming-soon__phyllo {
+    position: absolute !important;
+    left: 50% !important;
+    top: 40% !important;
+    transform: translate(-50%, -50%) !important;
+    width: var(--phyllo-width) !important;
+    height: var(--phyllo-height) !important;
+    opacity: 0.6;
+    filter: saturate(1.1) blur(0.2px);
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.mobile-coming-soon__title {
+    position: relative;
+    z-index: 1;
+    font-size: clamp(50px, 15vw, 100px);
+    margin: 0;
+    text-align: center;
+    will-change: transform, opacity, filter;
+    animation: mcsTitleIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.mobile-coming-soon__subtitle {
+    position: relative;
+    z-index: 1;
+    font-size: clamp(16px, 4vw, 22px);
+    opacity: 0.85;
+    color: #707070;
+    margin: 8px 24px 0 24px;
+    text-align: center;
+    will-change: transform, opacity, filter;
+    animation: mcsSubtitleIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+}
+
+.mobile-coming-soon__links {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+    gap: 12px;
+    margin-top: 20px;
+    width: 40vw;
+    padding: 10px;
+    /* Liquid glass look */
+    border-radius: 50px;
+    box-shadow: -8px -10px 46px rgba(0, 0, 0, 0.37);
+    border-style: solid;
+    border-color: #e1e1e155;
+    border-width: 0.5px 1.5px;
+    backdrop-filter: blur(3px) brightness(1.1);
+    -webkit-backdrop-filter: blur(3px) brightness(1.1);
+    animation: mcsContactIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s both;
+}
+.mobile-coming-soon__contact {
+    width: 80%;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translateY(10%);
+}
+
+.mobile-coming-soon__linkitem {
+    aspect-ratio: 1/1;
+    width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #e1e1e1;
+    text-decoration: none;
+    font-size: clamp(14px, 4.5vw, 18px);
+    border-radius: 999px;
+    border: 0;
+    background: transparent;
+}
+
+.mobile-coming-soon__linkitem:active,
+.mobile-coming-soon__linkitem:focus {
+    opacity: 1;
+}
+
+.mobile-coming-soon__icon {
+    aspect-ratio: 1/1;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.mobile-coming-soon__icon svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+}
+.mobile-coming-soon__icon svg *,
+.mobile-coming-soon__icon svg path,
+.mobile-coming-soon__icon svg rect,
+.mobile-coming-soon__icon svg circle,
+.mobile-coming-soon__icon svg line {
+    fill: currentColor;
+    stroke: currentColor;
+}
+
+/* label removed; keep spacing consistent via icon-only items */
+
+/* Base phyllo dot tweaks for this overlay (uses inline styles for transform) */
+.phyllo-field .phyllo-dot {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+/* Static half-shadow mask over the phyllotaxis field (bottom half shaded) */
+.mobile-coming-soon__phyllo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    filter: blur(10px);
+    background: linear-gradient(
+        to top,
+        #0b0b0bff 0%,
+        #0b0b0bff 30%,
+        #0b0b0b00 100%
+    );
+    pointer-events: none;
+}
+
+@keyframes mcsTitleIn {
+    0% {
+        opacity: 0;
+        filter: blur(14px);
+        transform: translateY(4rem) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes mcsSubtitleIn {
+    0% {
+        opacity: 0;
+        filter: blur(14px);
+        transform: translateY(4rem) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes mcsContactIn {
+    0% {
+        opacity: 0;
+        filter: blur(14px);
+        transform: translateY(4rem) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0) scale(1);
+    }
+}

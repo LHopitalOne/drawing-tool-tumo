@@ -105,16 +105,12 @@ export class ColorPickerModal {
 
     const hexWrap = document.createElement('div');
     hexWrap.className = 'cp-hex-wrap';
-    const hexLabel = document.createElement('label');
-    hexLabel.textContent = '#';
-    hexLabel.setAttribute('for', 'cp-hex-input');
     const hexInput = document.createElement('input');
     hexInput.id = 'cp-hex-input';
     hexInput.type = 'text';
     hexInput.inputMode = 'text';
     hexInput.autocomplete = 'off';
     hexInput.value = rgbToHex(...hsvToRgb(this.hue, this.saturation, this.value));
-    hexWrap.appendChild(hexLabel);
     hexWrap.appendChild(hexInput);
 
     const swatches = document.createElement('div');

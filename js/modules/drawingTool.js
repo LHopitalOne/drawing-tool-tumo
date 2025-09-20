@@ -314,8 +314,7 @@ class DrawingTool {
     const fabToggle = document.getElementById('fabToggle');
     const settingsPanel = document.getElementById('settingsPanel');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-    const colorInput = document.getElementById('brushColorInput');
-    const sizeInput = document.getElementById('brushSizeInput');
+    const sizeInput = document.getElementById('topBrushSize');
     const symmetryAxesInput = document.getElementById('symmetryAxesInput');
     const fitBtn = document.getElementById('fitViewBtn');
     const brushGroupEl = document.querySelector('.brush-group');
@@ -325,19 +324,6 @@ class DrawingTool {
       closeSettingsBtn.addEventListener('click', () => {
         settingsPanel.setAttribute('hidden', '');
         fabToggle.setAttribute('aria-expanded', 'false');
-      });
-    }
-
-    if (colorInput) {
-      // Initialize color input with universal color
-      colorInput.value = this.brushColor;
-      colorInput.addEventListener('input', (e) => {
-        const newColor = e.target.value || '#ffffff';
-        // Set universal color
-        this.brushColor = newColor;
-        // Apply to all brushes
-        Object.values(this.brushes).forEach((b) => { if (b.setColor) b.setColor(newColor); });
-        this.render();
       });
     }
     if (sizeInput) {
@@ -453,9 +439,23 @@ class DrawingTool {
     return this.viewport.worldFromClient(t.clientX, t.clientY);
   }
 
+  // Returns true when the color picker modal is currently open
+  isColorPickerOpen() {
+    try {
+      return Boolean(document.querySelector('.color-picker.cp-open'));
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Pinch/zoom handled by ViewportController
 
   startDrawing(e) {
+    // If color picker is open, ignore canvas clicks so it can close without drawing
+    if (this.isColorPickerOpen()) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      return;
+    }
     // Focus mode removed
     // Right-click opens radial selection and suspends drawing
     if (e && e.button === 2) {
@@ -483,6 +483,10 @@ class DrawingTool {
   }
 
   draw(e) {
+    // Ignore drawing while color picker is open
+    if (this.isColorPickerOpen()) {
+      return;
+    }
     // Focus mode removed
     // While radial is open, update hover selection and skip drawing
     if (this.radial.isOpen()) {
@@ -515,6 +519,11 @@ class DrawingTool {
   // Legacy helpers replaced by brush system
 
   handleTouch(e) {
+    // Ignore touch interactions while color picker is open
+    if (this.isColorPickerOpen()) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     // Focus mode removed
     const pos = this.getTouchPos(e);
@@ -927,9 +936,7 @@ class DrawingTool {
 
   _applyActiveBrushSettingsToUIAndBrush() {
     const s = this.getBrushSettings();
-    const colorInput = document.getElementById('brushColorInput');
-    const sizeInput = document.getElementById('brushSizeInput');
-    if (colorInput) colorInput.value = s.color || '#ffffff';
+    const sizeInput = document.getElementById('topBrushSize');
     if (sizeInput) sizeInput.value = String(s.size || 10);
     // Apply universal settings to all brushes
     Object.values(this.brushes).forEach((b) => {

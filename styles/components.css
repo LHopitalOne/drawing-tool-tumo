@@ -545,7 +545,7 @@
 .color-picker.cp-enter {
   opacity: 0;
   filter: blur(12px);
-  transform: translateY(12px) scale(0.98);
+  transform: translateY(10px) scale(1.02);
 }
 .color-picker.cp-open {
   opacity: 1;
@@ -736,7 +736,7 @@
 
 .color-picker .cp-hex-wrap {
   display: grid;
-  grid-template-columns: 14px 1fr;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 6px;
   grid-column: 1 / -1; /* span both columns */

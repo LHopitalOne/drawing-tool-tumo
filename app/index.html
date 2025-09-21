@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Scribble</title>
+    <link rel="preload" as="image" href="graphics/brush_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/brush_selected.svg">
+    <link rel="preload" as="image" href="graphics/pen_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/pen_selected.svg">
+    <link rel="preload" as="image" href="graphics/pencil_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/pencil_selected.svg">
+    <link rel="preload" as="image" href="graphics/spray_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/spray_selected.svg">
+    <link rel="preload" as="image" href="graphics/fountain_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/fountain_selected.svg">
+    <link rel="preload" as="image" href="graphics/eraser_not-selected.svg">
+    <link rel="preload" as="image" href="graphics/eraser_selected.svg">
+    <link rel="stylesheet" href="styles/base.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/modal.css">
+    <link rel="stylesheet" href="styles/responsive.css">
+    <link rel="stylesheet" href="styles/coming-soon.css">
+</head>
+<body>
+    <!-- Setup Modal -->
+    <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <h2>Setup</h2>
+            <form id="setupForm" novalidate>
+                <div class="form-group">
+                    <label for="canvasWidth">Canvas Width:</label>
+                    <input type="number" id="canvasWidth" value="800" min="1" max="50000" required>
+                </div>
+                <div class="form-group">
+                    <label for="canvasHeight">Canvas Height:</label>
+                    <input type="number" id="canvasHeight" value="800" min="1" max="50000" required>
+                </div>
+                <div class="form-group">
+                    <label for="backgroundColor">Background Color:</label>
+                    <input type="color" id="backgroundColor" value="#000000">
+                </div>
+                <div class="form-group">
+                    <label>Mode:</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="mode" value="draw" checked>
+                            <span>Draw</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="mode" value="upload">
+                            <span>Image upload</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="importActionGroup" style="display:none;">
+                    <button id="importFromSetupBtn" type="button" class="submit-btn">Upload</button>
+                </div>
+                <button id="setupSubmitBtn" type="submit" class="submit-btn">Submit</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="errorModal" class="modal error" role="dialog" aria-modal="true" aria-labelledby="errorTitle">
+        <div class="modal-content">
+            <h2 id="errorTitle">Error</h2>
+            <p id="errorMessage" style="margin-bottom:16px;color:#333;"></p>
+            <button id="errorCloseBtn" class="submit-btn" type="button">Close</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="settings-bar" role="toolbar" aria-label="Top settings bar">
+            <div class="settings-bar-content">
+                <div class="left-group" aria-label="Left actions">
+                    <div class="toolbar-chip" aria-label="Canvas background color">
+                        <button id="canvasBgIndicator" class="chip-circle" type="button" aria-label="Canvas background color"></button>
+                    </div>
+                    <div class="toolbar-chip" aria-label="Export">
+                        <div class="hover-reveal" data-pair="export-only">
+                            <button id="saveBtn" class="chip-button" type="button" title="Export" aria-label="Export">
+                                <span class="icon" aria-hidden="true">
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M10 3V13M10 13L6 9M10 13L14 9M4 17H16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="toolbar-chip" aria-label="Undo / Redo">
+                        <div class="hover-reveal" data-pair="undo-redo">
+                            <button id="undoBtn" class="chip-button" type="button" title="Undo" aria-label="Undo">
+                                <svg width="18" height="18" viewBox="0 0 47 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3.5 30.5C3.5 29.6716 2.82843 29 2 29C1.17157 29 0.5 29.6716 0.5 30.5H2H3.5ZM8.45312 15.1429L25.7341 16.3119L18.106 0.761578L8.45312 15.1429ZM45 30.5H43.5C43.5 41.5457 34.5457 50.5 23.5 50.5V52V53.5C36.2025 53.5 46.5 43.2025 46.5 30.5H45ZM23.5 52V50.5C12.4543 50.5 3.5 41.5457 3.5 30.5H2H0.5C0.5 43.2025 10.7975 53.5 23.5 53.5V52ZM23.5 9V10.5C34.5457 10.5 43.5 19.4543 43.5 30.5H45H46.5C46.5 17.7975 36.2025 7.5 23.5 7.5V9ZM20.5729 9.19758L20.7752 10.6839C21.6655 10.5627 22.575 10.5 23.5 10.5V9V7.5C22.4393 7.5 21.3946 7.5719 20.3706 7.71129L20.5729 9.19758Z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                            <button id="redoBtn" class="chip-button secondary" type="button" title="Redo" aria-label="Redo">
+                                <svg width="18" height="18" viewBox="0 0 47 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <g transform="translate(47,0) scale(-1,1)">
+                                        <path d="M3.5 30.5C3.5 29.6716 2.82843 29 2 29C1.17157 29 0.5 29.6716 0.5 30.5H2H3.5ZM8.45312 15.1429L25.7341 16.3119L18.106 0.761578L8.45312 15.1429ZM45 30.5H43.5C43.5 41.5457 34.5457 50.5 23.5 50.5V52V53.5C36.2025 53.5 46.5 43.2025 46.5 30.5H45ZM23.5 52V50.5C12.4543 50.5 3.5 41.5457 3.5 30.5H2H0.5C0.5 43.2025 10.7975 53.5 23.5 53.5V52ZM23.5 9V10.5C34.5457 10.5 43.5 19.4543 43.5 30.5H45H46.5C46.5 17.7975 36.2025 7.5 23.5 7.5V9ZM20.5729 9.19758L20.7752 10.6839C21.6655 10.5627 22.575 10.5 23.5 10.5V9V7.5C22.4393 7.5 21.3946 7.5719 20.3706 7.71129L20.5729 9.19758Z" fill="currentColor"/>
+                                    </g>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="toolbar-chip" aria-label="Move to trash">
+                        <button id="clearBtn" class="chip-button" type="button" title="Move to trash" aria-label="Move to trash">
+                            <span class="icon" aria-hidden="true">
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M5 6H15M8 9V13M12 9V13M7 6V4.5C7 3.67157 7.67157 3 8.5 3H11.5C12.3284 3 13 3.67157 13 4.5V6M4 6H16V16.5C16 17.3284 15.3284 18 14.5 18H5.5C4.67157 18 4 17.3284 4 16.5V6Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" style="display:none" />
+                </div>
+                <div class="right-group" aria-label="Brush and symmetry controls">
+                    <div class="size-control" aria-label="Brush size">
+                        <input id="topBrushSize" type="number" min="1" max="400" step="1" value="10" inputmode="numeric" aria-label="Brush size value" />
+                    </div>
+                    <div class="symmetry-control" aria-label="Symmetry axes">
+                        <input id="symmetryTopInput" type="number" min="1" max="64" step="1" value="1" inputmode="numeric" aria-label="Symmetry axes value" />
+                    </div>
+                    <button id="brushColorIndicator" class="chip-circle" type="button" aria-label="Brush color"></button>
+                </div>
+            </div>
+        </div>
+        <div class="drawing-area">
+            <canvas id="drawingCanvas" width="600" height="600"></canvas>
+        </div>
+    </div>
+
+
+  <!-- Settings Panel -->
+  <div id="settingsPanel" class="settings-panel" role="dialog" aria-modal="false" hidden>
+      <div class="settings-body">
+          <div class="brush-group" role="toolbar" aria-label="Brushes"></div>
+      </div>
+  </div>
+
+  <svg style="display:none;">
+    <filter id="displacementFilter">
+      <feTurbulence type="turbulence" baseFrequency="0.0" />
+      <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="300" />
+    </filter>
+  </svg>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html> 

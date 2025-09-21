@@ -3,6 +3,7 @@
 
 export const featureFlags = {
   mobileComingSoon: true,
+  welcomePage: true,
 };
 
 export default featureFlags;

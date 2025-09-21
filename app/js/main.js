@@ -10,6 +10,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   app.init();
 
   window.addEventListener('load', () => {
-    loader.close();
+    setTimeout(() => loader.close(), 2500);
   });
 });

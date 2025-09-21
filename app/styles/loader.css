@@ -1,0 +1,20 @@
+.page-loader {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: grid;
+	place-items: center;
+	background: #0b0b0b;
+}
+
+.page-loader__phyllo {
+	/* --phyllo-width: 120px;
+	--phyllo-height: 120px; */
+	--phyllo-dot-min-size: 2px;
+	--phyllo-dot-max-size: 6px;
+	transform-origin: center center;
+}
+
+@keyframes phyllo-pulse {}
+
+

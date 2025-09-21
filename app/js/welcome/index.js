@@ -8,9 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	const controller = new WelcomeController();
 	controller.init();
 
-	// Simulate quick readiness; in real app tie to actual async readiness
+	// Welcome page: close 2.5s after natural load (fixed wait)
 	window.addEventListener('load', () => {
-		setTimeout(() => loader.unmount(), 30000);
+		setTimeout(() => loader.close(), 2500);
 	});
 });
 

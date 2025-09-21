@@ -24,7 +24,6 @@ export class PhyllotaxisField {
     // Allow CSS variables to control dimensions; fall back to provided defaults
     field.style.width = `var(--phyllo-width, ${width}px)`;
     field.style.height = `var(--phyllo-height, ${height}px)`;
-    field.style.overflow = 'hidden';
     this.field = field;
   }
 

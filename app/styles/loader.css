@@ -5,6 +5,14 @@
 	display: grid;
 	place-items: center;
 	background: #0b0b0b;
+	transform: translateY(0);
+}
+
+.page-loader__content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
 }
 
 .page-loader__phyllo {
@@ -13,6 +21,24 @@
 	--phyllo-dot-min-size: 2px;
 	--phyllo-dot-max-size: 6px;
 	transform-origin: center center;
+}
+
+.page-loader__text {
+	opacity: 0;
+	color: rgba(255, 255, 255, 0.7);
+	font-size: 14px;
+	letter-spacing: 0.2px;
+	transition: opacity 320ms ease;
+}
+
+.page-loader.page-loader--show-text .page-loader__text {
+	opacity: 0.64;
+}
+
+/* Slide-out state for closing animation */
+.page-loader.page-loader--slide-out {
+	transition: transform 650ms ease-in-out;
+	transform: translateY(-100%);
 }
 
 @keyframes phyllo-pulse {}

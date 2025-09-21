@@ -36,3 +36,19 @@
 }
 
 
+/* Page transition overlay: slides in from bottom on navigation */
+.page-transition {
+	position: fixed;
+	inset: 0;
+	background: #0b0b0b;
+	transform: translateY(100%);
+	transition: transform 650ms ease-in-out;
+	z-index: 10000;
+	pointer-events: none;
+}
+
+.page-transition.page-transition--active {
+	transform: translateY(0);
+}
+
+

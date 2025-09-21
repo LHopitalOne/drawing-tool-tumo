@@ -13,9 +13,10 @@
     <div>
       <h1>Welcome to Scribble</h1>
       <p>A playful drawing tool. Ready to create?</p>
-      <p><a class="btn" href="#" onclick="window.location.href = window.location.pathname.replace(/\/$/, '') + '/app' + window.location.search + window.location.hash; return false;">Open the app</a></p>
+      <p><a id="openAppBtn" class="btn" href="#">Open the app</a></p>
     </div>
   </main>
+  <div class="page-transition" aria-hidden="true"></div>
   <script type="module" src="app/js/welcome/index.js"></script>
 </body>
 </html>

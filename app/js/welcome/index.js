@@ -1,5 +1,7 @@
 import WelcomeController from './WelcomeController.js';
 import PageLoader from './PageLoader.js';
+import FeatureFlagService from '../modules/features/FeatureFlagService.js';
+import featureFlags from '../modules/features/config.js';
 
 class LoadCoordinator {
     constructor({ minMs = 1200, maxMs = 5000, workPromises = [] } = {}) {
@@ -32,8 +34,12 @@ function preloadImages(urls = []) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const loader = new PageLoader();
-    loader.mount();
+    const flags = new FeatureFlagService(featureFlags);
+    let loader = null;
+    if (flags.isEnabled('loadingAnimation')) {
+        loader = new PageLoader();
+        loader.mount();
+    }
 
     const controller = new WelcomeController();
     controller.init();
@@ -59,13 +65,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const onFontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
     const onAssetsPreloaded = preloadImages(assets);
 
-    const coordinator = new LoadCoordinator({
-        minMs: 2500,       // minimum time to let the pulse animation be visible
-        maxMs: 5000,       // safety cap
-        workPromises: [onWindowLoad, onFontsReady, onAssetsPreloaded],
-    });
-
-    coordinator.wait().then(() => loader.close());
+    if (loader) {
+        const coordinator = new LoadCoordinator({
+            minMs: 2500,       // minimum time to let the pulse animation be visible
+            maxMs: 5000,       // safety cap
+            workPromises: [onWindowLoad, onFontsReady, onAssetsPreloaded],
+        });
+        coordinator.wait().then(() => loader.close());
+    }
 
     // Handle "Open the app" button with page transition
     const openBtn = document.getElementById('openAppBtn');
@@ -73,7 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openBtn && overlay) {
         openBtn.addEventListener('click', (evt) => {
             evt.preventDefault();
-            try { overlay.classList.add('page-transition--active'); } catch (_) {}
+            if (flags.isEnabled('pageTransition')) {
+                try { overlay.classList.add('page-transition--active'); } catch (_) {}
+            }
             // Build a robust URL to the app directory, ensuring trailing slash so relative assets resolve
             let target;
             try {
@@ -87,8 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const base = window.location.pathname.replace(/\/$/, '') + '/app/';
                 target = base + window.location.search + window.location.hash;
             }
-            // Navigate after the slide-in completes (match CSS duration 650ms)
-            setTimeout(() => { window.location.href = target; }, 660);
+            // Navigate after the slide-in completes (match CSS duration 650ms) if enabled; otherwise navigate immediately
+            if (flags.isEnabled('pageTransition')) {
+                setTimeout(() => { window.location.href = target; }, 660);
+            } else {
+                window.location.href = target;
+            }
         });
     }
 });

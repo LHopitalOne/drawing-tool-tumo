@@ -20,19 +20,48 @@
 	margin: 0 0 24px 0;
 }
 
+/* Hero typography */
+.welcome .hero-title {
+	font-size: clamp(40px, 9vw, 120px);
+	line-height: 1.02;
+	font-weight: 900;
+	letter-spacing: -0.5px;
+	margin: 0 0 12px 0;
+}
+
+/* no gradient text per design */
+
 .welcome a.btn {
-	display: inline-block;
-	padding: 12px 18px;
-	border-radius: 10px;
-	background: #ffffff;
-	color: #111;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px 22px;
+	border-radius: 50px;
+	background: transparent;
+	color: #e1e1e1;
 	text-decoration: none;
 	font-weight: 600;
-	transition: transform 120ms ease;
+	border-style: solid;
+	border-color: #e1e1e155;
+	border-width: 0.5px 1.5px;
+	backdrop-filter: blur(3px) brightness(1.1);
+	-webkit-backdrop-filter: blur(3px) brightness(1.1);
+	box-shadow: -8px -10px 46px rgba(0, 0, 0, 0.37);
+	transition: transform 120ms ease, box-shadow 200ms ease, opacity 200ms ease;
+}
+
+.welcome a.btn:hover {
+	transform: translateY(-1px);
+	box-shadow: -8px -10px 52px rgba(0, 0, 0, 0.42);
 }
 
 .welcome a.btn:active {
 	transform: translateY(1px);
+}
+
+.welcome a.btn:focus-visible {
+	outline: 2px solid #ffd166;
+	outline-offset: 3px;
 }
 
 

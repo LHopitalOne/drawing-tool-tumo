@@ -30,10 +30,10 @@ class DrawingTool {
     this.lastX = 0;
     this.lastY = 0;
     this.brushRadius = 30;
-    this.brushColor = '#ffffff';
+    this.brushColor = '#000000';
 
     // Background color (rendered behind content)
-    this.backgroundColor = '#000000';
+    this.backgroundColor = '#ffffff';
     // Tracks whether the content canvas has the background color baked into pixels
     // Older behavior painted background onto content; we convert on first change
     this._contentHasBakedBackground = true;
@@ -706,7 +706,7 @@ class DrawingTool {
     outCanvas.width = this.contentCanvas.width;
     outCanvas.height = this.contentCanvas.height;
     const outCtx = outCanvas.getContext('2d');
-    outCtx.fillStyle = this.backgroundColor || '#000000';
+    outCtx.fillStyle = this.backgroundColor || '#ffffff';
     outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
     outCtx.drawImage(this.contentCanvas, 0, 0);
 
@@ -845,12 +845,25 @@ class DrawingTool {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     // Draw background behind content area
-    ctx.fillStyle = this.backgroundColor || '#000000';
+    ctx.fillStyle = this.backgroundColor || '#ffffff';
     ctx.fillRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
     ctx.drawImage(this.contentCanvas, 0, 0);
 
     // Draw symmetry axes guide when enabled
     this._renderSymmetryAxes(ctx, dpr);
+
+    // Draw a thin outline around the drawable content area
+    // Keep the stroke 1px in screen space regardless of zoom/DPR
+    ctx.save();
+    {
+      const scale = (this.viewport && this.viewport.scale) ? this.viewport.scale : 1;
+      const screenPx = 1 / (scale * dpr);
+      ctx.lineWidth = screenPx;
+      ctx.strokeStyle = 'rgb(127,127,127)';
+      ctx.globalAlpha = 1;
+      ctx.strokeRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+    }
+    ctx.restore();
 
     // Draw desktop brush hover preview on top of content (only when not drawing and pointer is in canvas)
     if (!this.isDrawing && this._isPointerInCanvas) {
@@ -914,7 +927,7 @@ class DrawingTool {
     const scale = (this.viewport && this.viewport.scale) ? this.viewport.scale : 1;
     const screenPx = Math.max(0.25, 0.5 / (scale * dpr));
     ctx.lineWidth = screenPx;
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = 'rgb(127,127,127)';
     ctx.globalAlpha = 0.6;
     // Draw exactly `axes` rays separated by 2π/N, from center outward (N sectors)
     ctx.beginPath();

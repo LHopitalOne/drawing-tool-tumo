@@ -20,7 +20,7 @@ html, body {
 
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1b1b1b;
   min-height: 100vh;
   min-width: 100vw;
   display: flex;
@@ -47,6 +47,8 @@ body {
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 h1 {

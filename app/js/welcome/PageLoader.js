@@ -105,7 +105,7 @@ export default class PageLoader {
 		const total = expandDuration + 40 + collapseDuration + ringDelayMs * maxRing + 60;
 		setTimeout(() => {
 			try {
-				this.root.classList.add('page-loader--slide-out');
+				this.root.classList.add('page-loader--fade-out');
 				this.root.addEventListener('transitionend', () => this.unmount(), { once: true });
 			} catch (_) {
 				this.unmount();

@@ -81,16 +81,3 @@ h1 {
   margin: 0 auto;
   box-sizing: border-box;
 }
-
-/* Custom dimensions override */
-.drawing-area.custom-dimensions {
-  width: auto !important;
-  height: auto !important;
-  max-width: none !important;
-  max-height: none !important;
-}
-
-#drawingCanvas.custom-dimensions {
-  width: auto !important;
-  height: auto !important;
-}

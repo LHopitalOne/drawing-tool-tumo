@@ -6,8 +6,13 @@ import featureFlags from './modules/features/config.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const flags = new FeatureFlagService(featureFlags);
+  const isMobileComingSoon = flags.isMobileRuntime() && flags.isEnabled('mobileComingSoon');
+
+  // If mobile coming soon is active, do NOT show a page loader at all
   let loader = null;
-  if (flags.isEnabled('loadingAnimation')) {
+  if (isMobileComingSoon) {
+    try { const existing = document.querySelector('.page-loader'); if (existing) existing.remove(); } catch (_) {}
+  } else if (flags.isEnabled('loadingAnimation')) {
     loader = new PageLoader();
     loader.mount();
   } else {

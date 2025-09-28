@@ -35,6 +35,14 @@ function preloadImages(urls = []) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const flags = new FeatureFlagService(featureFlags);
+
+    // Coming soon should have higher priority than welcome page and never show loader
+    if (flags.isMobileRuntime() && flags.isEnabled('mobileComingSoon')) {
+        // Redirect immediately to the app, where the mobile coming soon overlay is mounted
+        try { window.location.replace('/app/'); } catch (_) { window.location.href = '/app/'; }
+        return;
+    }
+
     let loader = null;
     if (flags.isEnabled('loadingAnimation')) {
         loader = new PageLoader();

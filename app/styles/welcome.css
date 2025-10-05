@@ -161,3 +161,59 @@
 }
 
 
+
+/* Entry animations for welcome page */
+@keyframes welcome-fade-up {
+	0% {
+		opacity: 0;
+		transform: translateY(12px) scale(0.995);
+		filter: blur(2px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		filter: blur(0);
+	}
+}
+
+@keyframes nav-drop-in {
+	0% {
+		opacity: 0;
+		transform: translateY(-8px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Animate the top glassy nav and main hero on initial paint */
+.welcome-nav {
+	animation: nav-drop-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 60ms both;
+	will-change: opacity, transform;
+}
+
+.welcome {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 140ms both;
+	will-change: opacity, transform, filter;
+}
+
+/* Subtle stagger for hero elements */
+.welcome .hero-title {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
+}
+
+.welcome a.btn {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 320ms both;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+	.welcome-nav,
+	.welcome,
+	.welcome .hero-title,
+	.welcome a.btn {
+		animation: none !important;
+	}
+}
+

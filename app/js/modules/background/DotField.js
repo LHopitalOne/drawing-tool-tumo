@@ -25,6 +25,7 @@ export default class DotField {
     this.mouseX = -1e6;
     this.mouseY = -1e6;
     this._raf = 0;
+    this._dpr = 1; // DPR used for sizing/transform; keep consistent between frames
     this._onResize = this._onResize.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
     this._tick = this._tick.bind(this);
@@ -51,6 +52,7 @@ export default class DotField {
     const h = Math.max(1, Math.floor(window.innerHeight));
     this.canvas.width = Math.floor(w * dpr);
     this.canvas.height = Math.floor(h * dpr);
+    this._dpr = dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this._layoutDots(w, h);
   }
@@ -87,8 +89,15 @@ export default class DotField {
 
   _tick() {
     const ctx = this.ctx;
-    const w = this.canvas.width / (window.devicePixelRatio || 1);
-    const h = this.canvas.height / (window.devicePixelRatio || 1);
+    // If browser zoom changed (DPR changed) without a resize event, update backing store
+    const currentDpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    if (Math.abs(currentDpr - this._dpr) > 0.001) {
+      // Keep layout based on current viewport size
+      this._onResize();
+    }
+
+    const w = this.canvas.width / this._dpr;
+    const h = this.canvas.height / this._dpr;
     // Clear and paint background (if configured)
     ctx.clearRect(0, 0, w, h);
     if (this.backgroundColor) {

@@ -36,11 +36,6 @@
 	-webkit-backdrop-filter: blur(1px) brightness(1.1);
 	transition: transform 120ms ease, background 160ms ease, opacity 160ms ease, border-color 160ms ease;
 }
-.welcome-nav__group:nth-of-type(2) > a > span {
-	height: 50px !important;
-	/* padding-left: 15px;
-	padding-right: 15px; */
-}
 .welcome-nav__linkitem {
 	color: #e1e1e1;
 	text-decoration: none;

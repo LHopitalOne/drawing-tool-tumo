@@ -187,6 +187,7 @@ export default initBrushRing;
 function initTopBar() {
   const bgIndicator = document.getElementById('canvasBgIndicator');
   const brushColorIndicator = document.getElementById('brushColorIndicator');
+  const pipetteBtn = document.getElementById('pipetteBtn');
   const sizeInput = document.getElementById('topBrushSize');
   const symmetryInput = document.getElementById('symmetryTopInput');
   const undoBtn = document.getElementById('undoBtn');
@@ -325,24 +326,118 @@ function initTopBar() {
       );
     });
   }
+  const openBrushColorPicker = (anchor) => {
+    const dt = window.drawingTool;
+    openPicker(
+      anchor,
+      () => {
+        if (!dt) return '#ffffff';
+        const s = dt.getBrushSettings();
+        return s.color || '#ffffff';
+      },
+      (hex) => {
+        if (!dt) return;
+        dt.brushColor = hex;
+        Object.values(dt.brushes).forEach((b) => { if (b.setColor) b.setColor(hex); });
+        if (brushColorIndicator) brushColorIndicator.style.background = hex;
+        dt.render();
+      }
+    );
+  };
+
   if (brushColorIndicator) {
-    brushColorIndicator.addEventListener('click', () => {
-      const dt = window.drawingTool;
-      openPicker(
-        brushColorIndicator,
-        () => {
-          if (!dt) return '#ffffff';
-          const s = dt.getBrushSettings();
-          return s.color || '#ffffff';
-        },
-        (hex) => {
-          if (!dt) return;
-          dt.brushColor = hex;
-          Object.values(dt.brushes).forEach((b) => { if (b.setColor) b.setColor(hex); });
-          brushColorIndicator.style.background = hex;
-          dt.render();
+    brushColorIndicator.addEventListener('click', () => openBrushColorPicker(brushColorIndicator));
+  }
+
+  // --- Pipette mode: sample color from canvas under cursor and apply to brush ---
+  let _pipetteActive = false;
+  let _pipetteCursorUrl = null;
+  const ensurePipetteCursor = async () => {
+    if (_pipetteCursorUrl) return _pipetteCursorUrl;
+    try {
+      const res = await fetch('graphics/pipette.svg', { cache: 'force-cache' });
+      let svg = await res.text();
+      // Downscale for cursor and ensure currentColor is used
+      svg = svg
+        .replace(/width="[^"]*"/i, 'width="24"')
+        .replace(/height="[^"]*"/i, 'height="24"')
+        .replace(/fill="#?[0-9a-fA-F]{3,6}"/g, 'fill="currentColor"');
+      // Rotate group by 37deg around approximate center of original viewBox (11.5, 32.5)
+      svg = svg.replace(/<g(\s+[^>]*)?>/, (m) => {
+        if (/transform=/.test(m)) {
+          return m.replace(/transform="[^"]*"/, 'transform="rotate(37 11.5 32.5)"');
         }
-      );
+        return m.replace('<g', '<g transform="rotate(37 11.5 32.5)"');
+      });
+      const encoded = encodeURIComponent(svg)
+        .replace(/%0A/g, '')
+        .replace(/%20/g, ' ');
+      _pipetteCursorUrl = `url("data:image/svg+xml;utf8,${encoded}") 6 18, crosshair`;
+    } catch (_) {
+      _pipetteCursorUrl = 'crosshair';
+    }
+    return _pipetteCursorUrl;
+  };
+
+  const activatePipette = async () => {
+    const dt = window.drawingTool;
+    if (!dt || !dt.viewportCanvas) return;
+    const canvas = dt.viewportCanvas;
+    _pipetteActive = true;
+    try { canvas.style.cursor = await ensurePipetteCursor(); } catch (_) { canvas.style.cursor = 'crosshair'; }
+
+    const onMouseDownCapture = (e) => {
+      if (!_pipetteActive) return;
+      // Sample and stop draw handlers
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const x = Math.floor((e.clientX - rect.left) * dpr);
+        const y = Math.floor((e.clientY - rect.top) * dpr);
+        const ctx = canvas.getContext('2d');
+        const img = ctx.getImageData(x, y, 1, 1).data;
+        const r = img[0], g = img[1], b = img[2], a = img[3];
+        // Ignore fully transparent samples by falling back to background color
+        let hex;
+        if (a === 0) {
+          const bg = document.getElementById('backgroundColor');
+          hex = (bg && bg.value) ? bg.value : '#ffffff';
+        } else {
+          const toHex = (n) => Math.max(0, Math.min(255, n | 0)).toString(16).padStart(2, '0');
+          hex = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+        dt.brushColor = hex;
+        Object.values(dt.brushes).forEach((b) => { if (b.setColor) b.setColor(hex); });
+        if (brushColorIndicator) brushColorIndicator.style.background = hex;
+        dt.render();
+      } catch (_) {}
+      deactivatePipette();
+    };
+
+    const onKeyCancel = (e) => {
+      if (e.key === 'Escape') deactivatePipette();
+    };
+
+    const deactivatePipette = () => {
+      if (!_pipetteActive) return;
+      _pipetteActive = false;
+      canvas.style.cursor = '';
+      canvas.removeEventListener('mousedown', onMouseDownCapture, true);
+      window.removeEventListener('keydown', onKeyCancel);
+    };
+
+    // Expose cancel for safety
+    window._deactivatePipette = deactivatePipette;
+
+    canvas.addEventListener('mousedown', onMouseDownCapture, true);
+    window.addEventListener('keydown', onKeyCancel);
+  };
+
+  if (pipetteBtn) {
+    pipetteBtn.addEventListener('click', () => {
+      activatePipette();
     });
   }
 

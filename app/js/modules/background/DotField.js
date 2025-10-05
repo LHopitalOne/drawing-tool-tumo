@@ -7,6 +7,8 @@ export default class DotField {
     this.repelStrength = Number.isFinite(options.repelStrength) ? options.repelStrength : 0.08;
     this.restoringStrength = Number.isFinite(options.restoringStrength) ? options.restoringStrength : 0.03;
     this.friction = Number.isFinite(options.friction) ? options.friction : 0.9;
+    this.backgroundColor = typeof options.backgroundColor === 'string' ? options.backgroundColor : '';
+    this.colorFn = typeof options.colorFn === 'function' ? options.colorFn : null;
 
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d');
@@ -87,8 +89,12 @@ export default class DotField {
     const ctx = this.ctx;
     const w = this.canvas.width / (window.devicePixelRatio || 1);
     const h = this.canvas.height / (window.devicePixelRatio || 1);
+    // Clear and paint background (if configured)
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = this.dotColor;
+    if (this.backgroundColor) {
+      ctx.fillStyle = this.backgroundColor;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     const repelR2 = this.repelRadius * this.repelRadius;
     const mx = this.mouseX;
@@ -125,6 +131,12 @@ export default class DotField {
       // Draw
       ctx.beginPath();
       ctx.arc(d.x, d.y, this.dotRadius, 0, Math.PI * 2);
+      if (this.colorFn) {
+        const col = this.colorFn({ x: d.x, y: d.y, ox: d.ox, oy: d.oy, index: i, width: w, height: h });
+        if (typeof col === 'string' && col) ctx.fillStyle = col; else ctx.fillStyle = this.dotColor;
+      } else {
+        ctx.fillStyle = this.dotColor;
+      }
       ctx.fill();
     }
 

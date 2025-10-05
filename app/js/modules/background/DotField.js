@@ -7,6 +7,8 @@ export default class DotField {
     this.repelStrength = Number.isFinite(options.repelStrength) ? options.repelStrength : 0.08;
     this.restoringStrength = Number.isFinite(options.restoringStrength) ? options.restoringStrength : 0.03;
     this.friction = Number.isFinite(options.friction) ? options.friction : 0.9;
+    this.backgroundColor = typeof options.backgroundColor === 'string' ? options.backgroundColor : '';
+    this.colorFn = typeof options.colorFn === 'function' ? options.colorFn : null;
 
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d');
@@ -23,6 +25,7 @@ export default class DotField {
     this.mouseX = -1e6;
     this.mouseY = -1e6;
     this._raf = 0;
+    this._dpr = 1; // DPR used for sizing/transform; keep consistent between frames
     this._onResize = this._onResize.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
     this._tick = this._tick.bind(this);
@@ -49,6 +52,7 @@ export default class DotField {
     const h = Math.max(1, Math.floor(window.innerHeight));
     this.canvas.width = Math.floor(w * dpr);
     this.canvas.height = Math.floor(h * dpr);
+    this._dpr = dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this._layoutDots(w, h);
   }
@@ -85,10 +89,21 @@ export default class DotField {
 
   _tick() {
     const ctx = this.ctx;
-    const w = this.canvas.width / (window.devicePixelRatio || 1);
-    const h = this.canvas.height / (window.devicePixelRatio || 1);
+    // If browser zoom changed (DPR changed) without a resize event, update backing store
+    const currentDpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    if (Math.abs(currentDpr - this._dpr) > 0.001) {
+      // Keep layout based on current viewport size
+      this._onResize();
+    }
+
+    const w = this.canvas.width / this._dpr;
+    const h = this.canvas.height / this._dpr;
+    // Clear and paint background (if configured)
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = this.dotColor;
+    if (this.backgroundColor) {
+      ctx.fillStyle = this.backgroundColor;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     const repelR2 = this.repelRadius * this.repelRadius;
     const mx = this.mouseX;
@@ -125,6 +140,12 @@ export default class DotField {
       // Draw
       ctx.beginPath();
       ctx.arc(d.x, d.y, this.dotRadius, 0, Math.PI * 2);
+      if (this.colorFn) {
+        const col = this.colorFn({ x: d.x, y: d.y, ox: d.ox, oy: d.oy, index: i, width: w, height: h });
+        if (typeof col === 'string' && col) ctx.fillStyle = col; else ctx.fillStyle = this.dotColor;
+      } else {
+        ctx.fillStyle = this.dotColor;
+      }
       ctx.fill();
     }
 

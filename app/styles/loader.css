@@ -5,7 +5,8 @@
 	display: grid;
 	place-items: center;
 	background: #0b0b0b;
-	transform: translateY(0);
+	opacity: 1;
+	transition: opacity 650ms ease-out;
 }
 
 .page-loader__content {
@@ -35,10 +36,9 @@
 	opacity: 0.64;
 }
 
-/* Slide-out state for closing animation */
-.page-loader.page-loader--slide-out {
-	transition: transform 650ms ease-in-out;
-	transform: translateY(-100%);
+/* Closing animation: fade out */
+.page-loader.page-loader--fade-out {
+	opacity: 0;
 }
 
 @keyframes phyllo-pulse {}

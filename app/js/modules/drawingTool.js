@@ -108,28 +108,9 @@ class DrawingTool {
       this.handleSetupSubmit();
     });
 
-    // Toggle inputs based on mode; in upload mode hide size/color and show import button
-    const modeRadios = form.querySelectorAll('input[name="mode"]');
-    const widthGroup = form.querySelector('label[for="canvasWidth"]').parentElement;
-    const heightGroup = form.querySelector('label[for="canvasHeight"]').parentElement;
-    const colorGroup = form.querySelector('label[for="backgroundColor"]').parentElement;
-    const importActionGroup = document.getElementById('importActionGroup');
-    const submitBtn = document.getElementById('setupSubmitBtn');
+    // Mode selection removed: keep all fields visible and use draw mode always
     const fileInput = document.getElementById('fileInput');
-    const importBtn = document.getElementById('importFromSetupBtn');
-    const applyVisibility = () => {
-      const mode = form.querySelector('input[name="mode"]:checked').value;
-      const isUpload = mode === 'upload';
-      widthGroup.style.display = isUpload ? 'none' : '';
-      heightGroup.style.display = isUpload ? 'none' : '';
-      colorGroup.style.display = isUpload ? 'none' : '';
-      importActionGroup.style.display = isUpload ? '' : 'none';
-      submitBtn.style.display = isUpload ? 'none' : '';
-    };
-    modeRadios.forEach(r => r.addEventListener('change', applyVisibility));
-    applyVisibility();
-    if (importBtn && fileInput) {
-      importBtn.addEventListener('click', () => fileInput.click());
+    if (fileInput) {
       fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
     }
   }
@@ -150,7 +131,7 @@ class DrawingTool {
     const heightInput = document.getElementById('canvasHeight');
     const width = parseInt(widthInput.value);
     const height = parseInt(heightInput.value);
-    const mode = document.querySelector('input[name="mode"]:checked').value;
+    // Mode removed; always initialize drawing mode
 
     const minW = parseInt(widthInput.min) || 1;
     const maxW = parseInt(widthInput.max) || 10000;
@@ -184,14 +165,8 @@ class DrawingTool {
       }
     } catch (_) {}
 
-    if (mode === 'draw') {
-      this.init();
-      this.setupEventListeners();
-    } else {
-      this.initForUpload();
-      this.setupEventListeners();
-      document.getElementById('fileInput').click();
-    }
+    this.init();
+    this.setupEventListeners();
   }
 
   init() {

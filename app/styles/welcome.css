@@ -1,12 +1,93 @@
+/* Glassy top navigation */
+.welcome-nav {
+	position: fixed;
+	top: 12px;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	display: flex;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.welcome-nav__inner {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.welcome-nav__group {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	justify-content: space-around;
+	width: fit-content;
+	padding-left: 12px;
+	padding-right: 12px;
+	height: 50px;
+
+	background: rgba(0,0,0,0.25);
+	border-radius: 50px;
+	border-color: #e1e1e155;
+	border-width: 0.5px 1.5px;
+	border-style: solid;
+	box-shadow: -8px -10px 46px rgba(0, 0, 0, 0.37);
+	backdrop-filter: blur(1px) brightness(1.1);
+	-webkit-backdrop-filter: blur(1px) brightness(1.1);
+	transition: transform 120ms ease, background 160ms ease, opacity 160ms ease, border-color 160ms ease;
+}
+.welcome-nav__linkitem {
+	color: #e1e1e1;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	
+	/* aspect-ratio: 1 / 1;
+	width: 32px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12px;
+	color: #e1e1e1;
+	text-decoration: none;
+	background: rgba(255,255,255,0.04);
+	border: 1px solid rgba(255,255,255,0.06);
+	transition: transform 120ms ease, background 160ms ease, opacity 160ms ease, border-color 160ms ease; */
+}
+.welcome-nav__linkitem:hover { background: rgba(255,255,255,0.08); transform: translateY(-2px); }
+.welcome-nav__linkitem:active { transform: translateY(0); }
+
+.welcome-nav__icon { display: inline-flex; align-items: center; justify-content: center; }
+.welcome-nav__icon svg { width: 18px; height: 18px; display: block; }
+.welcome-nav__icon svg *,
+.welcome-nav__icon svg path,
+.welcome-nav__icon svg rect,
+.welcome-nav__icon svg circle,
+.welcome-nav__icon svg line { fill: currentColor; stroke: currentColor; }
+
+.welcome-nav__link {
+	color: #e1e1e1;
+	text-decoration: none;
+	padding: 8px 12px;
+	border-radius: 50px;
+	transition: opacity 160ms ease, transform 120ms ease, background 160ms ease;
+}
+.welcome-nav__link:hover { background: rgba(255,255,255,0.06); opacity: 1; transform: translateY(-2px); }
+.welcome-nav__link:active { transform: translateY(0); }
+
 .welcome {
 	min-height: 100dvh;
 	display: grid;
 	place-items: center;
-	background: #0f0f0f;
+	background: transparent;
 	color: #f4f4f4;
 	font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
 	text-align: center;
 	padding: 24px;
+	position: relative;
+	z-index: 1;
 }
 
 .welcome h1 {
@@ -16,23 +97,67 @@
 }
 
 .welcome p {
-	opacity: 0.85;
 	margin: 0 0 24px 0;
 }
 
+/* Hero typography */
+.welcome .hero-title {
+	font-size: clamp(40px, 9vw, 120px);
+	line-height: 1.02;
+	font-weight: 900;
+	letter-spacing: -0.5px;
+	margin: 0 0 12px 0;
+}
+
+/* no gradient text per design */
+
 .welcome a.btn {
-	display: inline-block;
-	padding: 12px 18px;
-	border-radius: 10px;
-	background: #ffffff;
-	color: #111;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px 22px;
+	border-radius: 50px;
+	background: rgba(0, 0, 0, 0.25);
+	color: #e1e1e1;
 	text-decoration: none;
 	font-weight: 600;
-	transition: transform 120ms ease;
+	border-style: solid;
+	border-color: #e1e1e155;
+	border-width: 0.5px 1.5px;
+	backdrop-filter: blur(1px) brightness(1.5) saturate(1.15) contrast(1.5);
+	-webkit-backdrop-filter: blur(1px) brightness(1.5) saturate(1.15) contrast(1.5);
+	box-shadow: -8px -10px 46px rgba(0, 0, 0, 0.37);
+	transition: transform 120ms ease, box-shadow 200ms ease, opacity 200ms ease;
+}
+
+.welcome a.btn:hover {
+	transform: translateY(-2px);
+	box-shadow: -8px -10px 52px rgba(0, 0, 0, 0.42);
 }
 
 .welcome a.btn:active {
-	transform: translateY(1px);
+	transform: translateY(0px);
+}
+
+.welcome a.btn:focus-visible {
+	outline: 2px solid #ffd166;
+	outline-offset: 3px;
+}
+
+
+/* Page transition overlay: fades in on navigation */
+.page-transition {
+	position: fixed;
+	inset: 0;
+	background: #0b0b0b;
+	opacity: 0;
+	transition: opacity 650ms ease-out;
+	z-index: 10000;
+	pointer-events: none;
+}
+
+.page-transition.page-transition--active {
+	opacity: 1;
 }
 
 

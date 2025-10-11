@@ -3,6 +3,8 @@ import PageLoader from './PageLoader.js';
 import FeatureFlagService from '../modules/features/FeatureFlagService.js';
 import featureFlags from '../modules/features/config.js';
 import DotField from '../modules/background/DotField.js';
+import SmoothScrollController from '../modules/controllers/smoothScrollController.js';
+import FormController from '../modules/controllers/formController.js';
 
 class LoadCoordinator {
     constructor({ minMs = 1200, maxMs = 5000, workPromises = [] } = {}) {
@@ -53,6 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const controller = new WelcomeController();
     controller.init();
 
+    // Initialize smooth scroll with 50% wheel speed and 2.5s anchor scroll duration
+    if (flags.isEnabled('smoothScrolling')) {
+        const smoothScroll = new SmoothScrollController(0.5, 2500);
+        window._smoothScroll = smoothScroll; // Store reference for cleanup if needed
+    }
+
     // Real loading coordination: ensure animation shows while real work proceeds
     const assetBase = 'app/graphics/';
     const assets = [
@@ -84,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Mount background dot field behind welcome content
+    let mainFieldCellSize = null;
     try {
         const dots = new DotField({
             numDots: 1400,
@@ -94,6 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
             restoringStrength: 0.025,
             friction: 0.92,
             backgroundColor: '#000000',
+            positioning: 'absolute',
+            customHeight: '100vh',
+            customTop: '0',
             colorFn: ({ x, y, width, height }) => {
                 // Color like phyllotaxis: map angle around center to hue
                 const cx = width * 0.5;
@@ -129,7 +141,97 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         dots.mount();
         window._dotFieldWelcome = dots;
+        
+        // Calculate cell size from the main field for consistent spacing
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const aspect = viewportWidth / viewportHeight;
+        const cols = Math.max(10, Math.round(Math.sqrt(1400 * aspect)));
+        mainFieldCellSize = viewportWidth / cols;
     } catch (_) {}
+
+    // Mount a second gradient dot field below the first one (fades from top to bottom over 25vh)
+    try {
+        const gradientDots = new DotField({
+            numDots: 1400,
+            dotColor: 'rgb(255,255,255)',
+            dotRadius: 1.1,
+            repelRadius: 120,
+            repelStrength: 0.1,
+            restoringStrength: 0.025,
+            friction: 0.92,
+            backgroundColor: '#000000',
+            positioning: 'absolute',
+            customHeight: '25vh',
+            customTop: '100vh',
+            referenceCellSize: mainFieldCellSize, // Use same cell size as main field for consistent spacing
+            colorFn: ({ ox, oy, width, height }) => {
+                // Color like phyllotaxis: map angle around center to hue
+                const cx = width * 0.5;
+                // For gradient field, calculate position relative to full viewport
+                const fullViewHeight = window.innerHeight;
+                const gradientHeight = fullViewHeight * 0.1;
+                
+                // Map oy (0 to gradientHeight) to full viewport coordinates for color calculation
+                const absoluteY = fullViewHeight + oy;
+                const cy = fullViewHeight * 0.5;
+                
+                const dx = ox - cx;
+                const dy = absoluteY - cy;
+                let angle = Math.atan2(dy, dx); // -PI..PI
+                let hue = (angle * 180 / Math.PI);
+                if (hue < 0) hue += 360;
+                // Slight radial modulation for brightness
+                const r = Math.hypot(dx, dy);
+                const maxR = Math.hypot(cx, cy);
+                const t = Math.min(1, r / (maxR * 0.85));
+                const s = 0.75;
+                const v = 0.9 - 0.2 * t;
+                // HSV -> RGB
+                const c = v * s;
+                const hp = hue / 60;
+                const xcol = c * (1 - Math.abs((hp % 2) - 1));
+                let r1 = 0, g1 = 0, b1 = 0;
+                if (hp >= 0 && hp < 1) { r1 = c; g1 = xcol; b1 = 0; }
+                else if (hp < 2) { r1 = xcol; g1 = c; b1 = 0; }
+                else if (hp < 3) { r1 = 0; g1 = c; b1 = xcol; }
+                else if (hp < 4) { r1 = 0; g1 = xcol; b1 = c; }
+                else if (hp < 5) { r1 = xcol; g1 = 0; b1 = c; }
+                else { r1 = c; g1 = 0; b1 = xcol; }
+                const m = v - c;
+                const R = Math.round((r1 + m) * 255);
+                const G = Math.round((g1 + m) * 255);
+                const B = Math.round((b1 + m) * 255);
+
+                // Gradient fade: oy goes from 0 (top of gradient canvas) to height (bottom)
+                const fadeT = Math.min(1, Math.max(0, oy / height));
+                
+                // Interpolate opacity from 1 to 0 (top to bottom)
+                const opacity = 1 - fadeT;
+                
+                return `rgba(${R},${G},${B},${opacity})`;
+            },
+            radiusFn: ({ oy, height }) => {
+                // Interpolate radius from 1.1 (at top) to 0 (at bottom)
+                const fadeT = Math.min(1, Math.max(0, oy / height));
+                
+                // Interpolate radius from 1.1 to 0
+                return 1.1 * (1 - fadeT);
+            }
+        });
+        
+        gradientDots.canvas.style.zIndex = '0';
+        
+        gradientDots.mount();
+        window._dotFieldGradient = gradientDots;
+    } catch (_) {}
+
+    // Initialize contact form controller
+    const contactForm = document.getElementById('contactForm');
+    if (contactForm) {
+        const formController = new FormController(contactForm, 'a04ad035-e72b-4435-b414-689b7d79b3ca');
+        window._formController = formController; // Store reference for cleanup if needed
+    }
 
     // Handle "Open the app" button with page transition
     const openBtn = document.getElementById('openAppBtn');

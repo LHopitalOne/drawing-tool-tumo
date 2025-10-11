@@ -2,28 +2,28 @@
 
 const ICONS = {
   soft: {
-    normal: 'graphics/brush_not-selected.svg',
-    selected: 'graphics/brush_selected.svg',
+    normal: 'graphics/icons/brush_not-selected.svg',
+    selected: 'graphics/icons/brush_selected.svg',
   },
   pen: {
-    normal: 'graphics/pen_not-selected.svg',
-    selected: 'graphics/pen_selected.svg',
+    normal: 'graphics/icons/pen_not-selected.svg',
+    selected: 'graphics/icons/pen_selected.svg',
   },
   air: {
-    normal: 'graphics/spray_not-selected.svg',
-    selected: 'graphics/spray_selected.svg',
+    normal: 'graphics/icons/spray_not-selected.svg',
+    selected: 'graphics/icons/spray_selected.svg',
   },
   fountain: {
-    normal: 'graphics/fountain_not-selected.svg',
-    selected: 'graphics/fountain_selected.svg',
+    normal: 'graphics/icons/fountain_not-selected.svg',
+    selected: 'graphics/icons/fountain_selected.svg',
   },
   pencil: {
-    normal: 'graphics/pencil_not-selected.svg',
-    selected: 'graphics/pencil_selected.svg',
+    normal: 'graphics/icons/pencil_not-selected.svg',
+    selected: 'graphics/icons/pencil_selected.svg',
   },
   eraser: {
-    normal: 'graphics/eraser_not-selected.svg',
-    selected: 'graphics/eraser_selected.svg',
+    normal: 'graphics/icons/eraser_not-selected.svg',
+    selected: 'graphics/icons/eraser_selected.svg',
   },
 };
 
@@ -355,7 +355,7 @@ function initTopBar() {
   const ensurePipetteCursor = async () => {
     if (_pipetteCursorUrl) return _pipetteCursorUrl;
     try {
-      const res = await fetch('graphics/pipette.svg', { cache: 'force-cache' });
+      const res = await fetch('graphics/icons/pipette.svg', { cache: 'force-cache' });
       let svg = await res.text();
       // Downscale for cursor and ensure currentColor is used
       svg = svg

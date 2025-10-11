@@ -8,6 +8,8 @@ export const featureFlags = {
   pageTransition: false,
   // Global loading animation flag (applies across pages)
   loadingAnimation: false,
+  // Custom smooth scrolling with reduced speed and easing
+  smoothScrolling: true,
 };
 
 export default featureFlags;

@@ -5,9 +5,9 @@ export const featureFlags = {
   mobileComingSoon: true,
   welcomePage: true,
   // Controls the slide-in transition overlay when navigating between pages
-  pageTransition: false,
+  pageTransition: true,
   // Global loading animation flag (applies across pages)
-  loadingAnimation: false,
+  loadingAnimation: true,
   // Custom smooth scrolling with reduced speed and easing
   smoothScrolling: true,
 };

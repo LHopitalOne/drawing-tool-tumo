@@ -527,9 +527,12 @@ class DrawingTool {
     // Track Shift key for straight line drawing
     if (e.key === 'Shift' && !this.isShiftPressed) {
       this.isShiftPressed = true;
-      // Lock angle will be set on next mouse move
-      // If currently drawing, update to show constrained line
+      // If currently drawing, update the straight line start to current position
+      // so the constraint is based on where Shift was pressed, not stroke start
       if (this.isDrawing) {
+        this.straightLineStartX = this.lastX;
+        this.straightLineStartY = this.lastY;
+        this.lockedAngle = null; // Reset locked angle
         this.render();
       }
     }
@@ -602,13 +605,18 @@ class DrawingTool {
     const angle = Math.atan2(dy, dx);
     const distance = Math.hypot(dx, dy);
 
+    // Minimum distance threshold before locking angle (in world/content coordinates)
+    // This prevents locking to the wrong direction based on tiny mouse movements
+    const MIN_LOCK_DISTANCE = 10;
+
     // If we should lock the angle and haven't locked it yet, lock it now
-    if (lockAngle && this.lockedAngle === null) {
+    // But only if the mouse has moved enough to clearly indicate a direction
+    if (lockAngle && this.lockedAngle === null && distance >= MIN_LOCK_DISTANCE) {
       // Snap to nearest 45-degree angle (8 directions: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°)
       this.lockedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
     }
 
-    // Use locked angle if available, otherwise calculate snap angle
+    // Use locked angle if available, otherwise calculate snap angle dynamically
     const snapAngle = this.lockedAngle !== null ? this.lockedAngle : Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
 
     return {

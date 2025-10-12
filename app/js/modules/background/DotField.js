@@ -9,15 +9,25 @@ export default class DotField {
     this.friction = Number.isFinite(options.friction) ? options.friction : 0.9;
     this.backgroundColor = typeof options.backgroundColor === 'string' ? options.backgroundColor : '';
     this.colorFn = typeof options.colorFn === 'function' ? options.colorFn : null;
+    this.radiusFn = typeof options.radiusFn === 'function' ? options.radiusFn : null;
+    
+    // Allow custom positioning strategy
+    this.positioning = options.positioning || 'fixed'; // 'fixed' or 'absolute'
+    this.customHeight = options.customHeight || null; // e.g., '10vh', '100px'
+    this.customTop = options.customTop || null; // e.g., '100vh', '0'
+    
+    // Option to use reference dimensions for consistent spacing
+    this.useReferenceAspect = options.useReferenceAspect || null; // e.g., 1.0 for square
+    this.referenceCellSize = options.referenceCellSize || null; // Fixed cell size in px
 
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d');
     this.canvas.setAttribute('aria-hidden', 'true');
-    this.canvas.style.position = 'fixed';
+    this.canvas.style.position = this.positioning;
     this.canvas.style.left = '0';
-    this.canvas.style.top = '0';
+    this.canvas.style.top = this.customTop || '0';
     this.canvas.style.width = '100vw';
-    this.canvas.style.height = '100vh';
+    this.canvas.style.height = this.customHeight || '100vh';
     this.canvas.style.pointerEvents = 'none';
     this.canvas.style.zIndex = '0';
 
@@ -48,8 +58,10 @@ export default class DotField {
 
   _onResize() {
     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const w = Math.max(1, Math.floor(window.innerWidth));
-    const h = Math.max(1, Math.floor(window.innerHeight));
+    // Use actual rendered canvas size (getBoundingClientRect accounts for CSS sizing)
+    const rect = this.canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.max(1, Math.floor(rect.height));
     this.canvas.width = Math.floor(w * dpr);
     this.canvas.height = Math.floor(h * dpr);
     this._dpr = dpr;
@@ -60,11 +72,23 @@ export default class DotField {
   _layoutDots(w, h) {
     // Even grid distribution
     const total = this.numDots;
-    const aspect = w / h;
-    const cols = Math.max(10, Math.round(Math.sqrt(total * aspect)));
-    const rows = Math.max(10, Math.round(total / cols));
-    const cellW = w / cols;
-    const cellH = h / rows;
+    
+    let cellW, cellH, cols, rows;
+    
+    if (this.referenceCellSize !== null) {
+      // Use fixed cell size for consistent spacing
+      cellW = this.referenceCellSize;
+      cellH = this.referenceCellSize;
+      cols = Math.max(1, Math.floor(w / cellW));
+      rows = Math.max(1, Math.ceil(total / cols));
+    } else {
+      // Use reference aspect ratio if provided, otherwise use actual canvas aspect
+      const aspect = this.useReferenceAspect !== null ? this.useReferenceAspect : (w / h);
+      cols = Math.max(10, Math.round(Math.sqrt(total * aspect)));
+      rows = Math.max(10, Math.round(total / cols));
+      cellW = w / cols;
+      cellH = h / rows;
+    }
 
     const dots = [];
     for (let r = 0; r < rows; r++) {
@@ -106,8 +130,10 @@ export default class DotField {
     }
 
     const repelR2 = this.repelRadius * this.repelRadius;
-    const mx = this.mouseX;
-    const my = this.mouseY;
+    // Convert mouse position from viewport coordinates to canvas-local coordinates
+    const rect = this.canvas.getBoundingClientRect();
+    const mx = this.mouseX - rect.left;
+    const my = this.mouseY - rect.top;
 
     for (let i = 0; i < this.dots.length; i++) {
       const d = this.dots[i];
@@ -138,8 +164,17 @@ export default class DotField {
       d.y += d.vy;
 
       // Draw
+      let radius = this.dotRadius;
+      if (this.radiusFn) {
+        const customRadius = this.radiusFn({ x: d.x, y: d.y, ox: d.ox, oy: d.oy, index: i, width: w, height: h });
+        if (Number.isFinite(customRadius) && customRadius >= 0) radius = customRadius;
+      }
+      
+      // Skip drawing if radius is effectively 0
+      if (radius < 0.01) continue;
+      
       ctx.beginPath();
-      ctx.arc(d.x, d.y, this.dotRadius, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, radius, 0, Math.PI * 2);
       if (this.colorFn) {
         const col = this.colorFn({ x: d.x, y: d.y, ox: d.ox, oy: d.oy, index: i, width: w, height: h });
         if (typeof col === 'string' && col) ctx.fillStyle = col; else ctx.fillStyle = this.dotColor;

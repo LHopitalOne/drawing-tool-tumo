@@ -1,3 +1,16 @@
+* {
+    &::-webkit-scrollbar {
+        background-color: transparent;
+    }
+}
+
+
+body {
+	background: black;
+	display: block !important;
+	justify-content: unset !important;
+}
+
 /* Glassy top navigation */
 .welcome-nav {
 	position: fixed;
@@ -7,7 +20,7 @@
 	z-index: 1000;
 	display: flex;
 	justify-content: center;
-	pointer-events: none;
+	pointer-events: auto;
 }
 
 .welcome-nav__inner {
@@ -56,7 +69,7 @@
 	border: 1px solid rgba(255,255,255,0.06);
 	transition: transform 120ms ease, background 160ms ease, opacity 160ms ease, border-color 160ms ease; */
 }
-.welcome-nav__linkitem:hover { background: rgba(255,255,255,0.08); transform: translateY(-2px); }
+.welcome-nav__linkitem:hover { background: rgba(255,255,255,0.08); }
 .welcome-nav__linkitem:active { transform: translateY(0); }
 
 .welcome-nav__icon { display: inline-flex; align-items: center; justify-content: center; }
@@ -74,7 +87,7 @@
 	border-radius: 50px;
 	transition: opacity 160ms ease, transform 120ms ease, background 160ms ease;
 }
-.welcome-nav__link:hover { background: rgba(255,255,255,0.06); opacity: 1; transform: translateY(-2px); }
+.welcome-nav__link:hover { background: rgba(255,255,255,0.06); opacity: 1; }
 .welcome-nav__link:active { transform: translateY(0); }
 
 .welcome {
@@ -160,4 +173,386 @@
 	opacity: 1;
 }
 
+
+
+/* Entry animations for welcome page */
+@keyframes welcome-fade-up {
+	0% {
+		opacity: 0;
+		transform: translateY(12px) scale(0.995);
+		filter: blur(2px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		filter: blur(0);
+	}
+}
+
+@keyframes nav-drop-in {
+	0% {
+		opacity: 0;
+		transform: translateY(-8px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Animate the top glassy nav and main hero on initial paint */
+.welcome-nav {
+	animation: nav-drop-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 60ms both;
+	will-change: opacity, transform;
+}
+
+.welcome {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 140ms both;
+	will-change: opacity, transform, filter;
+}
+
+/* Subtle stagger for hero elements */
+.welcome .hero-title {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
+}
+
+.welcome a.btn {
+	animation: welcome-fade-up 720ms cubic-bezier(0.2, 0.8, 0.2, 1) 320ms both;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+	.welcome-nav,
+	.welcome,
+	.welcome .hero-title,
+	.welcome a.btn {
+		animation: none !important;
+	}
+}
+
+/* About Section */
+.about-section {
+	position: relative;
+	z-index: 1;
+	background: transparent;
+	padding: 80px 24px;
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #f4f4f4;
+	font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+}
+
+.about-container {
+	max-width: 1400px;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 60px;
+	margin: 0 auto;
+}
+
+.about-text {
+	flex: 1;
+	padding-right: 40px;
+}
+
+.about-text h2 {
+	font-size: clamp(36px, 5vw, 64px);
+	font-weight: 900;
+	letter-spacing: -0.5px;
+	margin: 0 0 24px 0;
+	color: #f4f4f4;
+}
+
+.about-text p {
+	font-size: clamp(16px, 1.5vw, 18px);
+	line-height: 1.7;
+	color: #e1e1e1;
+	margin: 0 0 20px 0;
+}
+
+.about-text p:last-child {
+	margin-bottom: 0;
+}
+
+.about-text a {
+	color: #f4f4f4;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	text-decoration-thickness: 1px;
+	transition: opacity 200ms ease;
+}
+
+.about-text a:hover {
+	opacity: 0.7;
+}
+
+.about-image-wrapper {
+	width: 35%;
+	flex-shrink: 0;
+}
+
+.about-image-container {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 3.5 / 4.5;
+	/* border-radius: 12px; */
+	overflow: hidden;
+	cursor: pointer;
+}
+
+.about-image {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	filter: grayscale(100%);
+	transition: filter 320ms cubic-bezier(0.4, 0, 0.2, 1), transform 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.about-image-container:hover .about-image {
+	filter: grayscale(0%);
+	transform: scale(1.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+	.about-container {
+		flex-direction: column;
+		gap: 40px;
+	}
+	
+	.about-text {
+		padding-right: 0;
+		text-align: center;
+	}
+	
+	.about-image-wrapper {
+		width: 60%;
+		max-width: 400px;
+	}
+}
+
+@media (max-width: 768px) {
+	.about-section {
+		padding: 60px 24px;
+	}
+	
+	.about-image-wrapper {
+		width: 80%;
+		max-width: 350px;
+	}
+}
+
+/* Contact Section */
+.contact-section {
+	position: relative;
+	z-index: 1;
+	background: transparent;
+	padding: 50px 24px 0;
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #f4f4f4;
+	font-family: "Imagine Square ARM";
+}
+
+.contact-container {
+	max-width: 700px;
+	width: 100%;
+	text-align: center;
+	position: relative;
+}
+
+.contact-container::before {
+	content: '';
+	position: absolute;
+	inset: -120px;
+	background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 30%, transparent 70%);
+	pointer-events: none;
+	z-index: -1;
+	opacity: 0.6;
+}
+
+.contact-container h2 {
+	font-size: clamp(40px, 6vw, 72px);
+	font-weight: 900;
+	letter-spacing: -0.5px;
+	margin: 0 0 16px 0;
+	color: #f4f4f4;
+}
+
+.contact-intro {
+	font-size: clamp(16px, 1.5vw, 18px);
+	color: #d4d4d4;
+	margin: 0 0 48px 0;
+}
+
+.contact-form {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	text-align: left;
+}
+
+.form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.form-group label {
+	font-size: 14px;
+	font-weight: 600;
+	color: #e1e1e1;
+	letter-spacing: 0.3px;
+}
+
+.form-group input,
+.form-group textarea {
+	width: 100%;
+	padding: 14px 18px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	color: #f4f4f4;
+	font-size: 16px;
+	font-family: "Imagine Square ARM";
+	transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+	outline: none;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+	color: #888;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+	background: rgba(255, 255, 255, 0.06);
+	border-color: rgba(255, 255, 255, 0.2);
+	box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+}
+
+.form-group textarea {
+	resize: vertical;
+	min-height: 140px;
+}
+
+.submit-btn {
+	margin-top: 8px;
+	padding: 14px 32px;
+	border-radius: 50px;
+	background: rgba(255, 255, 255, 0.08);
+	color: #e1e1e1;
+	font-size: 16px;
+	font-weight: 600;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	cursor: pointer;
+	transition: transform 120ms ease, background 200ms ease, box-shadow 200ms ease;
+	font-family: "Imagine Square ARM";
+	align-self: center;
+}
+
+.submit-btn:hover {
+	background: rgba(255, 255, 255, 0.12);
+	transform: translateY(-2px);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.submit-btn:active {
+	transform: translateY(0);
+}
+
+.submit-btn:focus-visible {
+	outline: 2px solid #ffd166;
+	outline-offset: 3px;
+}
+
+/* Form Messages */
+.form-message {
+	margin-top: 16px;
+	padding: 12px 18px;
+	border-radius: 8px;
+	font-size: 14px;
+	text-align: center;
+	transition: opacity 300ms ease;
+	font-weight: 500;
+}
+
+.form-message--success {
+	background: rgba(100, 255, 150, 0.1);
+	color: rgb(100, 255, 150);
+	border: 1px solid rgba(100, 255, 150, 0.3);
+}
+
+.form-message--error {
+	background: rgba(255, 100, 100, 0.1);
+	color: rgb(255, 150, 150);
+	border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+@media (max-width: 768px) {
+	.contact-section {
+		padding: 60px 24px 100px;
+	}
+}
+
+/* Footer */
+.footer {
+	position: relative;
+	z-index: 1;
+	padding: 0 24px 40px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background: transparent;
+}
+
+.footer-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+
+.footer-social {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.footer-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: rgba(225, 225, 225, 0.4);
+	transition: color 200ms ease, opacity 200ms ease;
+}
+
+.footer-icon:hover {
+	color: rgba(225, 225, 225, 0.7);
+}
+
+.footer-icon svg {
+	width: 14px;
+	height: 14px;
+	display: block;
+}
+
+.footer-icon svg *,
+.footer-icon svg path {
+	fill: currentColor;
+}
+
+.footer-copyright {
+	font-size: 12px;
+	color: rgba(225, 225, 225, 0.35);
+	margin: 0;
+	font-weight: 400;
+	letter-spacing: 0.3px;
+}
 

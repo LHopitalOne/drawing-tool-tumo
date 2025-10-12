@@ -9,6 +9,7 @@ import {
 } from './brushes/index.js';
 import { hexToRgb } from './utils.js';
 import * as storage from './services/storage.js';
+import CanvasStateService from './services/canvasState.js';
 import { RadialController } from './controllers/radialController.js';
 import { ViewportController } from './controllers/viewportController.js';
 import * as symmetry from './math/symmetry.js';
@@ -59,6 +60,12 @@ class DrawingTool {
 
     // Dragging state
     this.isSpacePressed = false;
+    this.isShiftPressed = false;
+
+    // Straight line drawing (with Shift)
+    this.straightLineStartX = 0;
+    this.straightLineStartY = 0;
+    this.lockedAngle = null; // Locked angle for straight line drawing
 
     // Pinch zoom state
     this.isPinching = false;
@@ -87,6 +94,9 @@ class DrawingTool {
     this.redoStack = [];
     this.maxHistory = 50;
 
+    // Canvas state persistence service
+    this.stateService = new CanvasStateService();
+
     // Focus mode removed
 
     // Bind resize handler
@@ -98,7 +108,25 @@ class DrawingTool {
     try { window.drawingTool = this; } catch(_) {}
   }
 
-  setupModal() {
+  async setupModal() {
+    // Check if we're resuming from the same session (computer sleep/wake)
+    const isSameSession = this.stateService.isSameSession();
+    
+    if (isSameSession) {
+      // Auto-restore without showing setup modal
+      const metadata = this.stateService.getSavedMetadata();
+      if (metadata) {
+        console.log('Resuming from same session - auto-restoring without setup modal');
+        this.contentCanvas.width = metadata.width;
+        this.contentCanvas.height = metadata.height;
+        
+        await this.initWithRestore();
+        this.setupEventListeners();
+        return;
+      }
+    }
+
+    // Normal setup flow
     const modal = document.getElementById('setupModal');
     const form = document.getElementById('setupForm');
     modal.style.display = 'block';
@@ -126,7 +154,7 @@ class DrawingTool {
     };
   }
 
-  handleSetupSubmit() {
+  async handleSetupSubmit() {
     const widthInput = document.getElementById('canvasWidth');
     const heightInput = document.getElementById('canvasHeight');
     const width = parseInt(widthInput.value);
@@ -146,13 +174,45 @@ class DrawingTool {
       this.showError(`The dimensions are incorrect. The width must be between ${minW}–${maxW}, the height must be between ${minH}–${maxH} pixels.`);
       return;
     }
+
+    // Check if we should offer to restore saved state
+    // This will return false if we're in the same session (computer sleep/wake)
+    const shouldOfferRestore = this.stateService.shouldOfferRestore();
+    if (shouldOfferRestore) {
+      const metadata = this.stateService.getSavedMetadata();
+      const shouldRestore = await this.showRestoreDialog(metadata);
+      
+      if (shouldRestore) {
+        // Use saved dimensions
+        this.contentCanvas.width = metadata.width;
+        this.contentCanvas.height = metadata.height;
+        
+        document.getElementById('setupModal').style.display = 'none';
+        document.body.classList.remove('modal-open');
+        this.animateSettingsBar();
+        
+        await this.initWithRestore();
+        this.setupEventListeners();
+        return;
+      } else {
+        // Clear saved state if user chooses not to restore
+        this.stateService.clearSavedState();
+      }
+    }
+
     // Initialize content canvas at requested resolution
     this.contentCanvas.width = width;
     this.contentCanvas.height = height;
 
-
     document.getElementById('setupModal').style.display = 'none';
     document.body.classList.remove('modal-open');
+    this.animateSettingsBar();
+
+    this.init();
+    this.setupEventListeners();
+  }
+
+  animateSettingsBar() {
     // Animate settings bar emerging after setup closes
     try {
       const bar = document.querySelector('.settings-bar');
@@ -164,9 +224,16 @@ class DrawingTool {
         });
       }
     } catch (_) {}
+  }
 
-    this.init();
-    this.setupEventListeners();
+  showRestoreDialog(metadata) {
+    return new Promise((resolve) => {
+      const timeSaved = metadata && metadata.timestamp ? new Date(metadata.timestamp).toLocaleString() : 'recently';
+      const message = `We found a previously saved drawing (${metadata.width}x${metadata.height}px, saved ${timeSaved}).\n\nWould you like to restore it?`;
+      
+      const result = window.confirm(message);
+      resolve(result);
+    });
   }
 
   init() {
@@ -189,6 +256,89 @@ class DrawingTool {
     this.render();
     // Seed initial history state
     this._pushHistorySnapshot();
+
+    // Start auto-save functionality
+    this.startAutoSave();
+  }
+
+  async initWithRestore() {
+    // Initialize background and brush
+    this.backgroundColor = document.getElementById('backgroundColor').value;
+    this.contentCtx.strokeStyle = this.brushColor;
+    this.contentCtx.lineWidth = 1;
+    this.contentCtx.lineCap = 'round';
+    this.contentCtx.lineJoin = 'round';
+    this.initializeBrushes();
+
+    // New behavior: content has no baked background
+    this._contentHasBakedBackground = false;
+
+    // Restore saved state
+    const savedState = await this.stateService.restore();
+    if (savedState && savedState.image && savedState.metadata) {
+      // Restore background color
+      if (savedState.metadata.backgroundColor) {
+        this.backgroundColor = savedState.metadata.backgroundColor;
+        const bgColorInput = document.getElementById('backgroundColor');
+        if (bgColorInput) {
+          bgColorInput.value = savedState.metadata.backgroundColor;
+        }
+        const canvasBgColorInput = document.getElementById('canvasBackgroundColor');
+        if (canvasBgColorInput) {
+          canvasBgColorInput.value = savedState.metadata.backgroundColor;
+        }
+      }
+
+      // Clear canvas and draw restored image
+      this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+      this.contentCtx.drawImage(savedState.image, 0, 0);
+
+      // Restore undo/redo history
+      if (savedState.history && Array.isArray(savedState.history) && savedState.history.length > 0) {
+        this.history = savedState.history;
+        console.log(`Restored ${this.history.length} undo states`);
+      } else {
+        // If no history, seed with current state
+        this.history = [this._captureSnapshot()];
+      }
+
+      if (savedState.redoStack && Array.isArray(savedState.redoStack)) {
+        this.redoStack = savedState.redoStack;
+        console.log(`Restored ${this.redoStack.length} redo states`);
+      } else {
+        this.redoStack = [];
+      }
+      
+      console.log('Drawing restored from saved state');
+    } else {
+      // If restore failed, just initialize normally
+      this.contentCtx.clearRect(0, 0, this.contentCanvas.width, this.contentCanvas.height);
+      // Seed initial history state
+      this.history = [this._captureSnapshot()];
+      this.redoStack = [];
+    }
+
+    // Prepare viewport and fit content
+    this.viewport.resizeBackingStore();
+    this.viewport.fitToContent(this.contentCanvas.width, this.contentCanvas.height);
+    this.render();
+
+    // Start auto-save functionality
+    this.startAutoSave();
+  }
+
+  startAutoSave() {
+    // Set up the capture callback for auto-save
+    this.stateService.startAutoSave(() => {
+      return {
+        canvas: this.contentCanvas,
+        width: this.contentCanvas.width,
+        height: this.contentCanvas.height,
+        backgroundColor: this.backgroundColor,
+        history: this.history,
+        redoStack: this.redoStack
+      };
+    });
   }
 
   initForUpload() {
@@ -206,6 +356,11 @@ class DrawingTool {
     this.render();
     // Seed initial history state
     this._pushHistorySnapshot();
+
+    // Start auto-save functionality if not already started
+    if (!this.stateService.autoSaveTimer) {
+      this.startAutoSave();
+    }
   }
 
   initializeBrushes() {
@@ -369,6 +524,16 @@ class DrawingTool {
     const tag = active && active.tagName ? active.tagName.toLowerCase() : '';
     const isTextField = tag === 'input' || tag === 'textarea' || (active && active.isContentEditable);
 
+    // Track Shift key for straight line drawing
+    if (e.key === 'Shift' && !this.isShiftPressed) {
+      this.isShiftPressed = true;
+      // Lock angle will be set on next mouse move
+      // If currently drawing, update to show constrained line
+      if (this.isDrawing) {
+        this.render();
+      }
+    }
+
     // Global app shortcuts
     const isModifier = (e.ctrlKey || e.metaKey) && !isTextField;
     if (isModifier) {
@@ -398,6 +563,14 @@ class DrawingTool {
   }
 
   handleKeyUp(e) {
+    if (e.key === 'Shift') {
+      this.isShiftPressed = false;
+      this.lockedAngle = null; // Clear locked angle when Shift is released
+      // If currently drawing, update to remove constraint
+      if (this.isDrawing) {
+        this.render();
+      }
+    }
     if (e.code === 'Space') {
       this.isSpacePressed = false;
       this.isDragging = false;
@@ -412,6 +585,36 @@ class DrawingTool {
   getTouchPos(e) {
     const t = e.touches[0];
     return this.viewport.worldFromClient(t.clientX, t.clientY);
+  }
+
+  /**
+   * Constrains a point to snap to straight lines at 45-degree intervals
+   * @param {number} x - Current x position
+   * @param {number} y - Current y position
+   * @param {number} startX - Starting x position
+   * @param {number} startY - Starting y position
+   * @param {boolean} lockAngle - If true, locks the angle on first call
+   * @returns {{x: number, y: number}} Constrained position
+   */
+  constrainToStraightLine(x, y, startX, startY, lockAngle = false) {
+    const dx = x - startX;
+    const dy = y - startY;
+    const angle = Math.atan2(dy, dx);
+    const distance = Math.hypot(dx, dy);
+
+    // If we should lock the angle and haven't locked it yet, lock it now
+    if (lockAngle && this.lockedAngle === null) {
+      // Snap to nearest 45-degree angle (8 directions: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°)
+      this.lockedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+    }
+
+    // Use locked angle if available, otherwise calculate snap angle
+    const snapAngle = this.lockedAngle !== null ? this.lockedAngle : Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+
+    return {
+      x: startX + Math.cos(snapAngle) * distance,
+      y: startY + Math.sin(snapAngle) * distance
+    };
   }
 
   // Returns true when the color picker modal is currently open
@@ -453,6 +656,10 @@ class DrawingTool {
     const pos = this.getMousePos(e);
     this.lastX = pos.x;
     this.lastY = pos.y;
+    // Store starting position for straight line constraint
+    this.straightLineStartX = pos.x;
+    this.straightLineStartY = pos.y;
+    this.lockedAngle = null; // Reset locked angle for new stroke
     this._symmetryBeginAndDot(pos.x, pos.y);
     this.render();
   }
@@ -484,7 +691,13 @@ class DrawingTool {
 
     if (!this.isDrawing) return;
     e.preventDefault();
-    const pos = this.getMousePos(e);
+    let pos = this.getMousePos(e);
+    
+    // Apply straight line constraint if Shift is held
+    if (this.isShiftPressed) {
+      pos = this.constrainToStraightLine(pos.x, pos.y, this.straightLineStartX, this.straightLineStartY, true);
+    }
+    
     this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
     this.lastX = pos.x;
     this.lastY = pos.y;
@@ -570,14 +783,23 @@ class DrawingTool {
         this.isDrawing = true;
         this.lastX = pos.x;
         this.lastY = pos.y;
+        // Store starting position for straight line constraint
+        this.straightLineStartX = pos.x;
+        this.straightLineStartY = pos.y;
+        this.lockedAngle = null; // Reset locked angle for new stroke
         this._symmetryBeginAndDot(pos.x, pos.y);
         this.render();
         return;
       }
       if (this.isDrawing) {
-        this._symmetryStroke(this.lastX, this.lastY, pos.x, pos.y);
-        this.lastX = pos.x;
-        this.lastY = pos.y;
+        let drawPos = pos;
+        // Apply straight line constraint if Shift is held
+        if (this.isShiftPressed) {
+          drawPos = this.constrainToStraightLine(pos.x, pos.y, this.straightLineStartX, this.straightLineStartY, true);
+        }
+        this._symmetryStroke(this.lastX, this.lastY, drawPos.x, drawPos.y);
+        this.lastX = drawPos.x;
+        this.lastY = drawPos.y;
         this.render();
       }
     } else if (e.type === 'touchend' || e.type === 'touchcancel') {
@@ -617,6 +839,7 @@ class DrawingTool {
     }
 
     this.isDrawing = false;
+    this.lockedAngle = null; // Clear locked angle when stroke ends
     const brush = this.getActiveBrush();
     if (brush.endStroke) this._symmetryEndStroke();
     // Snapshot after finishing a stroke
@@ -631,6 +854,10 @@ class DrawingTool {
     this.render();
     // Push history so clear is undoable
     this._pushHistorySnapshot();
+    // Save immediately after clearing
+    if (this.stateService) {
+      this.stateService.saveNow();
+    }
   }
 
   changeBackgroundColor(color) {
@@ -655,6 +882,10 @@ class DrawingTool {
     // Update background color and re-render
     this.backgroundColor = color;
     this.render();
+    // Save after background color change
+    if (this.stateService) {
+      this.stateService.saveNow();
+    }
   }
 
   _unbakeBackgroundColor(prevHex) {
@@ -717,6 +948,10 @@ class DrawingTool {
     const prev = this.history[this.history.length - 1];
     this._applySnapshot(prev);
     this.render();
+    // Save after undo
+    if (this.stateService) {
+      this.stateService.saveNow();
+    }
   }
   redo() {
     if (this.redoStack.length === 0) return;
@@ -725,6 +960,10 @@ class DrawingTool {
     this._applySnapshot(next);
     this.history.push(next);
     this.render();
+    // Save after redo
+    if (this.stateService) {
+      this.stateService.saveNow();
+    }
   }
 
   _captureSnapshot() {
@@ -840,6 +1079,11 @@ class DrawingTool {
     }
     ctx.restore();
 
+    // Draw straight line guide when shift is held and drawing
+    if (this.isDrawing && this.isShiftPressed) {
+      this._renderStraightLineGuide(ctx, dpr);
+    }
+
     // Draw desktop brush hover preview on top of content (only when not drawing and pointer is in canvas)
     if (!this.isDrawing && this._isPointerInCanvas) {
       this._renderBrushPreview(ctx, dpr);
@@ -885,6 +1129,39 @@ class DrawingTool {
       this._lastPointerClientY,
       radius,
     );
+  }
+
+  _renderStraightLineGuide(ctx, dpr) {
+    // Draw a guide line from start point to current point
+    ctx.save();
+    const scale = (this.viewport && this.viewport.scale) ? this.viewport.scale : 1;
+    const screenPx = Math.max(0.5, 1 / (scale * dpr));
+    
+    ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+    ctx.lineWidth = screenPx * 2;
+    ctx.setLineDash([screenPx * 5, screenPx * 3]);
+    ctx.lineCap = 'round';
+    
+    ctx.beginPath();
+    ctx.moveTo(this.straightLineStartX, this.straightLineStartY);
+    ctx.lineTo(this.lastX, this.lastY);
+    ctx.stroke();
+    
+    // Draw small circles at start and end points
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(0, 150, 255, 0.5)';
+    
+    // Start point circle
+    ctx.beginPath();
+    ctx.arc(this.straightLineStartX, this.straightLineStartY, screenPx * 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // End point circle
+    ctx.beginPath();
+    ctx.arc(this.lastX, this.lastY, screenPx * 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
   }
 
   _renderSymmetryAxes(ctx, dpr) {
